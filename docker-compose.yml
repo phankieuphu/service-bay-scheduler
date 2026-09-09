@@ -5,10 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: app
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
-      localstack:
-        condition: service_started
     env_file:
       - .env
     ports:
@@ -16,40 +14,24 @@ services:
     networks:
       - backend
 
-  mysql:
-    image: mysql:8.0
-    container_name: mysql
+  postgres:
+    image: postgres:16
+    container_name: postgres
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: booking_system
-      MYSQL_USER: app
-      MYSQL_PASSWORD: app_pass
+      POSTGRES_DB: booking_system
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_pass
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql/init:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "pg_isready -U app -d booking_system"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - backend
-
-  localstack:
-    image: localstack/localstack:latest
-    container_name: localstack
-    ports:
-      - "4566:4566"
-    environment:
-      SERVICES: dynamodb,sqs
-      DEBUG: 1
-      AWS_DEFAULT_REGION: ap-southeast-1
-    volumes:
-      - localstack_data:/var/lib/localstack
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - backend
 
@@ -95,6 +77,5 @@ networks:
     driver: bridge
 
 volumes:
-  mysql_data:
-  localstack_data:
+  postgres_data:
   redis_data:
