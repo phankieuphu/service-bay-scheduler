@@ -3,24 +3,24 @@ package database_provider
 import (
 	"customer-service/config"
 	"fmt"
-	"time"
 
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-func NewMySQLClient(cfg config.Config) (*gorm.DB, error) {
+func NewPostgresClient(cfg config.Config) (*gorm.DB, error) {
 	dbCfg := cfg.Database
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?parseTime=true&charset=utf8mb4&loc=UTC",
-		dbCfg.Username,
-		dbCfg.Password,
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 		dbCfg.Host,
 		dbCfg.Port,
+		dbCfg.Username,
+		dbCfg.Password,
 		dbCfg.Database,
+		dbCfg.SSLMode,
 	)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		PrepareStmt: true, // important for performance
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		PrepareStmt: true, // cache prepare sql statement
 	})
 	if err != nil {
 		return nil, err
@@ -31,9 +31,9 @@ func NewMySQLClient(cfg config.Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetMaxOpenConns(dbCfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(dbCfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(dbCfg.ConnMaxLifetime)
 
 	return db, nil
 }

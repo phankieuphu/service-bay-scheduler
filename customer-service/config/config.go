@@ -7,20 +7,10 @@ import (
 )
 
 type Config struct {
-	AWS
 	Database
 	API
 	Kafka
 	Redis
-}
-
-type AWS struct {
-	Region   string
-	SqsTopic SQSTopic
-}
-
-type SQSTopic struct {
-	Customer string
 }
 
 type Database struct {
@@ -29,10 +19,10 @@ type Database struct {
 	Username        string
 	Password        string
 	Database        string
+	SSLMode         string
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
-	Driver          string
 }
 
 type API struct {
@@ -42,8 +32,14 @@ type API struct {
 }
 
 type Kafka struct {
-	Brokers       []string
+	Brokers []string
+	// ProducerTopic is where this service publishes Customer lifecycle events
+	// (CustomerCreated/CustomerUpdated) for other services to consume.
 	ProducerTopic string
+	// ConsumerTopic is identity-service's user-event stream, not our own
+	// ProducerTopic — customer-service reacts to new/updated Users (role=Customer)
+	// to create/update the local Customer profile. Must stay a different topic
+	// from ProducerTopic or this consumer group would replay its own output.
 	ConsumerTopic string
 	ConsumerGroup string
 }
@@ -61,13 +57,17 @@ func (r Redis) Addr() string {
 
 func LoadConfig() *Config {
 	return &Config{
-		AWS: AWS{
-			Region: GetEnv("AWS_REGION", "ap-southeast-1"),
-			SqsTopic: SQSTopic{
-				Customer: GetEnv("ACCOUNTING_SQS", ""),
-			},
+		Database: Database{
+			Host:            GetEnv("DB_HOST", "localhost"),
+			Port:            getEnvInt("DB_PORT", 5432),
+			Username:        GetEnv("DB_USERNAME", "postgres"),
+			Password:        GetEnv("DB_PASSWORD", ""),
+			Database:        GetEnv("DB_NAME", "customer_service"),
+			SSLMode:         GetEnv("DB_SSLMODE", "disable"),
+			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
+			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
+			ConnMaxLifetime: time.Duration(getEnvInt("DB_CONN_MAX_LIFETIME_SEC", 1800)) * time.Second,
 		},
-		Database: Database{},
 		API: API{
 			Port:         GetEnv("API_PORT", "8080"),
 			ReadTimeout:  time.Duration(getEnvInt("API_READ_TIMEOUT_SEC", 30)) * time.Second,
@@ -76,7 +76,7 @@ func LoadConfig() *Config {
 		Kafka: Kafka{
 			Brokers:       []string{GetEnv("KAFKA_BROKERS", "localhost:9092")},
 			ProducerTopic: GetEnv("KAFKA_PRODUCER_TOPIC", "customer.events"),
-			ConsumerTopic: GetEnv("KAFKA_CONSUMER_TOPIC", "customer.events"),
+			ConsumerTopic: GetEnv("KAFKA_CONSUMER_TOPIC", "identity.user-events"),
 			ConsumerGroup: GetEnv("KAFKA_CONSUMER_GROUP", "customer-service"),
 		},
 		Redis: Redis{

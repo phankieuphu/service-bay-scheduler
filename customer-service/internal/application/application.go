@@ -4,7 +4,6 @@ import (
 	"context"
 	"customer-service/config"
 	"customer-service/internal/adapters/cache"
-	"customer-service/internal/adapters/consumer"
 	database_provider "customer-service/internal/adapters/database/provider"
 	ginhttp "customer-service/internal/adapters/http"
 	"customer-service/internal/adapters/kafka"
@@ -23,7 +22,7 @@ func CustomerApplication(ctx context.Context) {
 	cfg := config.LoadConfig()
 
 	// database
-	database, err := database_provider.NewMySQLClient(*cfg)
+	database, err := database_provider.NewPostgresClient(*cfg)
 	if err != nil {
 		log.Fatalf("failed to init database: %v", err)
 	}
@@ -31,20 +30,6 @@ func CustomerApplication(ctx context.Context) {
 	// repository & service
 	entryCustomerRepository := repository.NewCustomerRepository(database)
 	entryCustomerService := services.NewCustomerService(*cfg, entryCustomerRepository)
-
-	// SQS consumer
-	queueClient, err := consumer.NewSQSClient(*cfg, ctx)
-	if err != nil {
-		log.Fatalf("failed to init SQS client: %v", err)
-	}
-	queueProvider, err := consumer.NewQueueProvider(*queueClient)
-	if err != nil {
-		log.Fatalf("failed to init queue provider: %v", err)
-	}
-	accountConsumer, err := consumer.NewCustomerConsumer(ctx, queueProvider, cfg, entryCustomerService, cfg.SqsTopic.Customer)
-	if err != nil {
-		log.Fatalf("failed to init customer consumer: %v", err)
-	}
 
 	// Redis cache
 	redisCache, err := cache.NewRedisCache(cfg.Redis)
@@ -75,7 +60,6 @@ func CustomerApplication(ctx context.Context) {
 
 	log.Println("Customer Application Started")
 
-	go accountConsumer.Start(ctx)
 	go kafkaConsumer.Start(ctx)
 	httpServer.Start()
 }

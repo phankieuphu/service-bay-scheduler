@@ -6,5 +6,7 @@ import (
 )
 
 type CustomerService interface {
-	Save(context.Context, entity.Customer) error
+	CreateCustomer(ctx context.Context, customer entity.Customer) (entity.Customer, error)
+	GetCustomer(ctx context.Context, customerID int64) (entity.Customer, error)
+	GetCustomers(ctx context.Context, params ListCustomersParams) (CustomerPage, error)
 }
