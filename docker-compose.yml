@@ -1,14 +1,31 @@
 services:
-  app:
+  customer-service:
     build:
-      context: .
+      context: ./customer-service
       dockerfile: Dockerfile
-    container_name: app
+    container_name: customer-service
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - .env
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: customer_db
+      DB_SSLMODE: disable
+      API_PORT: 8080
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_PRODUCER_TOPIC: customer.events
+      KAFKA_CONSUMER_TOPIC: identity.user-events
+      KAFKA_CONSUMER_GROUP: customer-service
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
     ports:
       - "8080:8080"
     networks:
@@ -19,16 +36,16 @@ services:
     container_name: postgres
     restart: always
     environment:
-      POSTGRES_DB: booking_system
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app_pass
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d booking_system"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
