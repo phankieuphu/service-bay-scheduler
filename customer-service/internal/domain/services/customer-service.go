@@ -24,7 +24,13 @@ type CustomerService struct {
 func (e *CustomerService) CreateCustomer(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
 	customer.Status = constants.StatusActive
 
-	return e.repository.Create(ctx, customer)
+	customer, err := e.repository.Create(ctx, customer)
+	if err != nil {
+
+		return entity.Customer{}, err
+	}
+
+	return customer, err
 }
 
 // GetCustomer implements [ports.CustomerService].
