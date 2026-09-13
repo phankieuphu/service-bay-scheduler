@@ -6,15 +6,6 @@ Base code to create new another repository
 
 ---
 
-## Documentation
-
-* [Business Requirement](docs/business-requirement.md)
-* [Architecture Design](docs/architecture-design.md)
-* [Technical Requirement](docs/technical-requirement.md)
-* [Responsibility Planning](docs/responsibility-planning.md)
-
----
-
 ## Repository Purpose
 
 * Clean and normalize data from multiple sources
