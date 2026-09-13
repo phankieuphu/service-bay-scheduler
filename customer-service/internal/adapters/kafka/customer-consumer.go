@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 	"customer-service/config"
-	"log"
+	"customer-service/pkg/logger"
 
 	"github.com/IBM/sarama"
 )
@@ -29,7 +29,7 @@ func NewConsumer(cfg config.Kafka, handler MessageHandler) (*Consumer, error) {
 		return nil, err
 	}
 
-	log.Printf("Kafka consumer group=%s connected to brokers: %v", cfg.ConsumerGroup, cfg.Brokers)
+	logger.Info("Kafka consumer connected", "group", cfg.ConsumerGroup, "brokers", cfg.Brokers)
 	return &Consumer{group: group, topic: cfg.ConsumerTopic, handler: handler}, nil
 }
 
@@ -37,7 +37,7 @@ func (c *Consumer) Start(ctx context.Context) {
 	h := &consumerGroupHandler{handler: c.handler}
 	for {
 		if err := c.group.Consume(ctx, []string{c.topic}, h); err != nil {
-			log.Printf("kafka consumer error: %v", err)
+			logger.Error("kafka consumer error", "error", err)
 		}
 		if ctx.Err() != nil {
 			return
@@ -59,7 +59,7 @@ func (h *consumerGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error { re
 func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		if err := h.handler(session.Context(), msg.Key, msg.Value); err != nil {
-			log.Printf("message handling error: %v", err)
+			logger.Error("message handling error", "error", err)
 		} else {
 			session.MarkMessage(msg, "")
 		}

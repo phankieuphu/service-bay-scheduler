@@ -3,7 +3,9 @@ package cache
 import (
 	"context"
 	"customer-service/config"
-	"log"
+	"customer-service/internal/domain/ports"
+	"customer-service/pkg/logger"
+	"errors"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -24,7 +26,7 @@ func NewRedisCache(cfg config.Redis) (*RedisCache, error) {
 		return nil, err
 	}
 
-	log.Printf("Redis connected at %s", cfg.Addr())
+	logger.Info("Redis connected", "addr", cfg.Addr())
 	return &RedisCache{client: client}, nil
 }
 
@@ -33,7 +35,11 @@ func (r *RedisCache) Set(ctx context.Context, key string, value any, ttl time.Du
 }
 
 func (r *RedisCache) Get(ctx context.Context, key string) (string, error) {
-	return r.client.Get(ctx, key).Result()
+	value, err := r.client.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ports.ErrCacheMiss
+	}
+	return value, err
 }
 
 func (r *RedisCache) Delete(ctx context.Context, key string) error {

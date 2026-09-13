@@ -9,10 +9,15 @@ import (
 	"customer-service/internal/adapters/kafka"
 	"customer-service/internal/adapters/repository"
 	"customer-service/internal/domain/services"
-	"log"
+	"customer-service/pkg/logger"
+	"time"
 
 	"github.com/joho/godotenv"
 )
+
+// outboxRelayInterval is how often the outbox table is polled for
+// messages to publish to Kafka.
+const outboxRelayInterval = 2 * time.Second
 
 type Application struct {
 }
@@ -20,45 +25,52 @@ type Application struct {
 func CustomerApplication(ctx context.Context) {
 	godotenv.Load()
 	cfg := config.LoadConfig()
+	logger.Init(cfg.Logger.ToOptions())
 
 	// database
 	database, err := database_provider.NewPostgresClient(*cfg)
 	if err != nil {
-		log.Fatalf("failed to init database: %v", err)
+		logger.Fatal("failed to init database", "error", err)
 	}
-
-	// repository & service
-	entryCustomerRepository := repository.NewCustomerRepository(database)
-	entryCustomerService := services.NewCustomerService(*cfg, entryCustomerRepository)
-
-	// Redis cache
-	redisCache, err := cache.NewRedisCache(cfg.Redis)
-	if err != nil {
-		log.Fatalf("failed to init Redis: %v", err)
-	}
-	_ = redisCache
 
 	// Kafka producer
 	kafkaProducer, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
-		log.Fatalf("failed to init Kafka producer: %v", err)
+		logger.Fatal("failed to init Kafka producer", "error", err)
 	}
 	defer kafkaProducer.Close()
 
+	// Redis cache
+	redisCache, err := cache.NewRedisCache(cfg.Redis)
+	if err != nil {
+		logger.Fatal("failed to init Redis", "error", err)
+	}
+	defer redisCache.Close()
+
+	// repository & service
+	txManager := database_provider.NewTxManager(database)
+	entryCustomerRepository := repository.NewCustomerRepository(database)
+	entryOutboxRepository := repository.NewOutboxRepository(database)
+	entryCustomerService := services.NewCustomerService(*cfg, entryCustomerRepository, entryOutboxRepository, txManager, redisCache)
+
+	// Outbox relay: delivers rows written by the service above to Kafka.
+	outboxRelay := kafka.NewOutboxRelay(kafkaProducer, entryOutboxRepository, outboxRelayInterval)
+	go outboxRelay.Start(ctx)
+
 	// Kafka consumer
 	kafkaConsumer, err := kafka.NewConsumer(cfg.Kafka, func(ctx context.Context, key, value []byte) error {
-		log.Printf("kafka message received key=%s value=%s", key, value)
+		logger.Info("kafka message received", "key", string(key), "value", string(value))
 		return nil
 	})
 	if err != nil {
-		log.Fatalf("failed to init Kafka consumer: %v", err)
+		logger.Fatal("failed to init Kafka consumer", "error", err)
 	}
 	defer kafkaConsumer.Close()
 
 	// HTTP server (gin)
 	httpServer := ginhttp.NewServer(cfg.API, entryCustomerService)
 
-	log.Println("Customer Application Started")
+	logger.Info("Customer Application Started")
 
 	go kafkaConsumer.Start(ctx)
 	httpServer.Start()

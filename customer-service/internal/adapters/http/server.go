@@ -5,7 +5,7 @@ import (
 	"customer-service/config"
 	"customer-service/internal/adapters/http/handler"
 	"customer-service/internal/domain/ports"
-	"log"
+	"customer-service/pkg/logger"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,9 +35,9 @@ func NewServer(cfg config.API, accountService ports.CustomerService) *Server {
 }
 
 func (s *Server) Start() {
-	log.Printf("HTTP server listening on %s", s.httpServer.Addr)
+	logger.Info("HTTP server listening", "addr", s.httpServer.Addr)
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("HTTP server error: %v", err)
+		logger.Fatal("HTTP server error", "error", err)
 	}
 }
 

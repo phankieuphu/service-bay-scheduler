@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 	"customer-service/config"
-	"log"
+	"customer-service/pkg/logger"
 
 	"github.com/IBM/sarama"
 )
@@ -24,7 +24,7 @@ func NewProducer(cfg config.Kafka) (*Producer, error) {
 		return nil, err
 	}
 
-	log.Printf("Kafka producer connected to brokers: %v", cfg.Brokers)
+	logger.Info("Kafka producer connected", "brokers", cfg.Brokers)
 	return &Producer{producer: p}, nil
 }
 
@@ -38,7 +38,7 @@ func (p *Producer) Publish(_ context.Context, topic, key string, payload []byte)
 	if err != nil {
 		return err
 	}
-	log.Printf("published to topic=%s partition=%d offset=%d", topic, partition, offset)
+	logger.Info("published", "topic", topic, "partition", partition, "offset", offset)
 	return nil
 }
 

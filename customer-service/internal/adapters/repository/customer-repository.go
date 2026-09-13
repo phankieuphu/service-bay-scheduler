@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"customer-service/internal/adapters/database/models"
+	database_provider "customer-service/internal/adapters/database/provider"
 	"customer-service/internal/domain/entity"
 	"customer-service/internal/domain/ports"
 	"errors"
@@ -23,7 +24,7 @@ type CustomerRepository struct {
 func (c CustomerRepository) Create(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
 	model := c.toModels(customer)
 
-	if err := c.db.WithContext(ctx).Create(&model).Error; err != nil {
+	if err := database_provider.DBFromContext(ctx, c.db).Create(&model).Error; err != nil {
 		if isDuplicateKeyError(err) {
 			return entity.Customer{}, ports.ErrConflict
 		}
@@ -35,7 +36,7 @@ func (c CustomerRepository) Create(ctx context.Context, customer entity.Customer
 
 // Delete implements [ports.CustomerRepository].
 func (c CustomerRepository) Delete(ctx context.Context, id int64) error {
-	result := c.db.WithContext(ctx).Delete(&models.Customer{}, id)
+	result := database_provider.DBFromContext(ctx, c.db).Delete(&models.Customer{}, id)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -50,7 +51,7 @@ func (c CustomerRepository) Delete(ctx context.Context, id int64) error {
 func (c CustomerRepository) GetByID(ctx context.Context, id int64) (entity.Customer, error) {
 	var model models.Customer
 
-	if err := c.db.WithContext(ctx).First(&model, id).Error; err != nil {
+	if err := database_provider.DBFromContext(ctx, c.db).First(&model, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return entity.Customer{}, ports.ErrNotFound
 		}
@@ -68,7 +69,7 @@ func (c CustomerRepository) GetByID(ctx context.Context, id int64) (entity.Custo
 func (c CustomerRepository) List(ctx context.Context, params ports.ListCustomersParams) (ports.CustomerPage, error) {
 	var rows []models.Customer
 
-	query := c.db.WithContext(ctx).
+	query := database_provider.DBFromContext(ctx, c.db).
 		Order("id ASC").
 		Limit(params.Limit + 1)
 	if params.Cursor > 0 {
@@ -109,7 +110,7 @@ func (c CustomerRepository) List(ctx context.Context, params ports.ListCustomers
 func (c CustomerRepository) Update(ctx context.Context, customer entity.Customer) error {
 	model := c.toModels(customer)
 
-	result := c.db.WithContext(ctx).
+	result := database_provider.DBFromContext(ctx, c.db).
 		Model(&models.Customer{}).
 		Where("id = ? AND updated_at = ?", model.ID, model.UpdatedAt).
 		Updates(&model)
@@ -131,7 +132,7 @@ func (c CustomerRepository) Update(ctx context.Context, customer entity.Customer
 // (updated_at moved) by another write since the caller last read it.
 func (c CustomerRepository) updateFailureReason(ctx context.Context, id int64) error {
 	var count int64
-	if err := c.db.WithContext(ctx).
+	if err := database_provider.DBFromContext(ctx, c.db).
 		Model(&models.Customer{}).
 		Where("id = ?", id).
 		Count(&count).Error; err != nil {

@@ -11,6 +11,7 @@ type Config struct {
 	API
 	Kafka
 	Redis
+	Logger
 }
 
 type Database struct {
@@ -55,6 +56,12 @@ func (r Redis) Addr() string {
 	return r.Host + ":" + r.Port
 }
 
+type Logger struct {
+	Level     string // debug, info, warn, error
+	Format    string // json, text
+	AddSource bool
+}
+
 func LoadConfig() *Config {
 	return &Config{
 		Database: Database{
@@ -85,6 +92,11 @@ func LoadConfig() *Config {
 			Password: GetEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvInt("REDIS_DB", 0),
 		},
+		Logger: Logger{
+			Level:     GetEnv("LOG_LEVEL", "info"),
+			Format:    GetEnv("LOG_FORMAT", "json"),
+			AddSource: getEnvBool("LOG_ADD_SOURCE", false),
+		},
 	}
 }
 
@@ -106,4 +118,16 @@ func getEnvInt(key string, defaultValue int) int {
 		return defaultValue
 	}
 	return n
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultValue
+	}
+	b, err := strconv.ParseBool(val)
+	if err != nil {
+		return defaultValue
+	}
+	return b
 }
