@@ -4,6 +4,6 @@ type VehicleStatus string
 
 const (
 	StatusActive   VehicleStatus = "ACTIVE"
-	StatusInactive VehicleStatus = "INACTIVE"
-	StatusBanned   VehicleStatus = "BANNED"
+	StatusSold     VehicleStatus = "SOLD"
+	StatusScrapped VehicleStatus = "SCRAPPED"
 )
