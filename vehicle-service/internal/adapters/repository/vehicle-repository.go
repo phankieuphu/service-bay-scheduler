@@ -153,10 +153,6 @@ func isDuplicateKeyError(err error) bool {
 func (c VehicleRepository) toModels(vehicle entity.Vehicle) models.Vehicle {
 	return models.Vehicle{
 		ID:        vehicle.ID,
-		Name:      vehicle.Name,
-		Email:     vehicle.Email,
-		Phone:     vehicle.Phone,
-		BirthDay:  vehicle.BirthDay,
 		Status:    vehicle.Status,
 		CreatedAt: vehicle.CreatedAt,
 		UpdatedAt: vehicle.UpdatedAt,
@@ -166,10 +162,6 @@ func (c VehicleRepository) toModels(vehicle entity.Vehicle) models.Vehicle {
 func (c VehicleRepository) toDomain(model models.Vehicle) entity.Vehicle {
 	return entity.Vehicle{
 		ID:        model.ID,
-		Name:      model.Name,
-		Email:     model.Email,
-		Phone:     model.Phone,
-		BirthDay:  model.BirthDay,
 		Status:    model.Status,
 		CreatedAt: model.CreatedAt,
 		UpdatedAt: model.UpdatedAt,

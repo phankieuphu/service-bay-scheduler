@@ -1,8 +1,8 @@
 package database_provider
 
 import (
-	"vehicle-service/config"
 	"fmt"
+	"vehicle-service/config"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
