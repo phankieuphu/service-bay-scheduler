@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 	"vehicle-service/internal/domain/entity"
 )
 
@@ -13,12 +14,13 @@ type VehicleRepository interface {
 	Delete(ctx context.Context, id int64) error
 }
 
-type CustomerVehicle interface {
+type VehicleCustomerRepository interface {
 	GetCustomerVehicle(ctx context.Context, customerID int) (entity.CustomerVehicle, error)
-	TransferVehicle(ctx context.Context, customerID int) error
-	AssignVehicleToCustomer(ctx context.Context, vehicleID, customerID int) error
+	TransferVehicleToCustomer(ctx context.Context, customerID int) error
+	AssignVehicleToCustomer(ctx context.Context, vehicleID, customerID int, date time.Time) error
+	UnassignVehicleFromCustomer(ctx context.Context, vehicleID, customerID int, date time.Time) error
 }
 
-type VehicleMaterial interface {
-	GetVehicleMaterials(ctx context.Context, vehicle_model_id int) ([]entity.VehicleMaterial, error)
+type VehicleMaterialRepository interface {
+	GetVehicleMaterials(ctx context.Context, vehicle_id int) ([]entity.VehicleMaterial, error)
 }

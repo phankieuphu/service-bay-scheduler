@@ -7,14 +7,10 @@ import (
 	database_provider "vehicle-service/internal/adapters/database/provider"
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
+	"vehicle-service/pkg/utils"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
-
-// pgUniqueViolationCode is PostgreSQL's SQLSTATE code for a unique-key
-// violation (e.g. the email unique constraint).
-const pgUniqueViolationCode = "23505"
 
 type VehicleRepository struct {
 	db *gorm.DB
@@ -25,7 +21,7 @@ func (c VehicleRepository) Create(ctx context.Context, vehicle entity.Vehicle) (
 	model := c.toModels(vehicle)
 
 	if err := database_provider.DBFromContext(ctx, c.db).Create(&model).Error; err != nil {
-		if isDuplicateKeyError(err) {
+		if utils.IsDuplicateKeyError(err) {
 			return entity.Vehicle{}, ports.ErrConflict
 		}
 		return entity.Vehicle{}, err
@@ -115,7 +111,7 @@ func (c VehicleRepository) Update(ctx context.Context, vehicle entity.Vehicle) e
 		Where("id = ? AND updated_at = ?", model.ID, model.UpdatedAt).
 		Updates(&model)
 	if result.Error != nil {
-		if isDuplicateKeyError(result.Error) {
+		if utils.IsDuplicateKeyError(result.Error) {
 			return ports.ErrConflict
 		}
 		return result.Error
@@ -143,11 +139,6 @@ func (c VehicleRepository) updateFailureReason(ctx context.Context, id int64) er
 	}
 
 	return ports.ErrConflict
-}
-
-func isDuplicateKeyError(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode
 }
 
 func (c VehicleRepository) toModels(vehicle entity.Vehicle) models.Vehicle {

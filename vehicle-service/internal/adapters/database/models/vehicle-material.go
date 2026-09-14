@@ -6,7 +6,7 @@ import (
 
 type VehicleMaterial struct {
 	ID          int64     `json:"id" gorm:"column:id;type:bigint"`
-	VehicleID   int64     `json:"vehicle_id" gorm:"column:vehicle_id;type:bigint"`
+	VehicleID   int64     `json:"vehicle_id" gorm:"column:vehicle_id;type:bigint"` // index
 	Vehicle     Vehicle   `json:"vehicle" gorm:"foreignKey:VehicleID;references:ID"`
 	MaterialID  int64     `json:"material_id" gorm:"column:material_id;type:bigint"` // manage from dealership service
 	Description string    `json:"description,omitempty" gorm:"column:description;type:varchar;size:255"`
