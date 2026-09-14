@@ -2,16 +2,15 @@ package entity
 
 import (
 	"time"
-	"vehicle-service/internal/constants"
 )
 
 type VehicleMaterial struct {
-	ID        int64
-	Name      string
-	Email     string
-	Phone     string
-	BirthDay  time.Time
-	Status    constants.VehicleStatus
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID          int64
+	VehicleID   int64
+	MaterialID  int64
+	Description string
+	Count       int
+	InstalledAt time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }

@@ -1,6 +1,7 @@
 package constants
 
 const (
-	VehicleCreated = "vehicle.account.created.v1"
-	VehicleUpdate  = "vehicle.account.updated.v1"
+	VehicleCreated  = "vehicle.vehicle.created.v1"
+	VehicleUpdate   = "vehicle.vehicle.updated.v1"
+	TransferVehicle = "vehicle.vehicle-customer.transfer.v1"
 )

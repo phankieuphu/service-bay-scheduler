@@ -50,8 +50,9 @@ func VehicleApplication(ctx context.Context) {
 	// repository & service
 	txManager := database_provider.NewTxManager(database)
 	entryVehicleRepository := repository.NewVehicleRepository(database)
+	entryVehicleCustomerRepository := repository.NewVehicleCustomerRepository(database)
 	entryOutboxRepository := repository.NewOutboxRepository(database)
-	entryVehicleService := services.NewVehicleService(*cfg, entryVehicleRepository, entryOutboxRepository, txManager, redisCache)
+	entryVehicleService := services.NewVehicleService(*cfg, entryVehicleRepository, entryOutboxRepository, entryVehicleCustomerRepository, txManager, redisCache)
 
 	// Outbox relay: delivers rows written by the service above to Kafka.
 	outboxRelay := kafka.NewOutboxRelay(kafkaProducer, entryOutboxRepository, outboxRelayInterval)
