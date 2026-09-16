@@ -6,12 +6,12 @@ import (
 )
 
 type CustomerVehicle struct {
-	ID        int64
-	Name      string
-	Email     string
-	Phone     string
-	BirthDay  time.Time
-	Status    constants.VehicleStatus
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         int64
+	Vehicle    Vehicle
+	CustomerID int64
+	OwnedFrom  time.Time
+	OwnedTo    time.Time
+	Status     constants.VehicleStatus
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }

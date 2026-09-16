@@ -11,7 +11,7 @@ type CustomerVehicle struct {
 	VehicleID  int64                   `json:"vehicle_id" gorm:"column:vehicle_id;type:bigint"`
 	Vehicle    Vehicle                 `json:"vehicle" gorm:"foreignKey:VehicleID;references:ID"`
 	OwnedFrom  time.Time               `json:"owned_from" gorm:"column:owned_from;type:datetime"`
-	OwnedTo    time.Time               `json:"owned_to" gorm:"column:owned_from;type:datetime"`
+	OwnedTo    time.Time               `json:"owned_to" gorm:"column:owned_to;type:datetime"`
 	Status     constants.VehicleStatus `json:"status" gorm:"column:status;type:varchar;size:20"`
 	CreatedAt  time.Time               `json:"created_at" gorm:"column:created_at;type:timestamp;autoCreateTime"`
 	UpdatedAt  time.Time               `json:"updated_at" gorm:"column:updated_at;type:timestamp;autoUpdateTime"`
