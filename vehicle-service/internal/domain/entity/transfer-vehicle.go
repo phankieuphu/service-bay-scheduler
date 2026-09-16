@@ -6,7 +6,7 @@ import (
 
 type TransferVehicle struct {
 	Date      time.Time
-	From      int // from customer
-	To        int // to customer
-	VehicleID int // which vehicle
+	From      int64 // from customer
+	To        int64 // to customer
+	VehicleID int64 // which vehicle
 }

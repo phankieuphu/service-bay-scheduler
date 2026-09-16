@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"vehicle-service/internal/adapters/database/models"
+	database_provider "vehicle-service/internal/adapters/database/provider"
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
@@ -17,7 +18,7 @@ type VehicleMaterialRepository struct {
 // GetVehicleMaterials implements [ports.VehicleMaterialRepository].
 func (c VehicleMaterialRepository) GetVehicleMaterials(ctx context.Context, vehicle_id int) ([]entity.VehicleMaterial, error) {
 	var rows []models.VehicleMaterial
-	if err := c.db.Where("vehicle_id = ?", vehicle_id).Find(&rows).Error; err != nil {
+	if err := database_provider.DBFromContext(ctx, c.db).Where("vehicle_id = ?", vehicle_id).Find(&rows).Error; err != nil {
 		logger.ErrorContext(ctx, "failed to list vehicle material", "vehicle_id", vehicle_id, "error", err)
 		return []entity.VehicleMaterial{}, err
 	}

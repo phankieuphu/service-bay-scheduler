@@ -15,10 +15,10 @@ type VehicleRepository interface {
 }
 
 type VehicleCustomerRepository interface {
-	GetCustomerVehicle(ctx context.Context, customerID int) (entity.CustomerVehicle, error)
-	TransferVehicleToCustomer(ctx context.Context, customerID int) error
-	AssignVehicleToCustomer(ctx context.Context, vehicleID, customerID int, date time.Time) error
-	UnassignVehicleFromCustomer(ctx context.Context, vehicleID, customerID int, date time.Time) error
+	GetCustomerVehicle(ctx context.Context, customerID int64) (entity.CustomerVehicle, error)
+	// TransferVehicleToCustomer(ctx context.Context, customerID int64) error
+	AssignVehicleToCustomer(ctx context.Context, vehicleID, customerID int64, date time.Time) error
+	UnassignVehicleFromCustomer(ctx context.Context, vehicleID, customerID int64, date time.Time) error
 }
 
 type VehicleMaterialRepository interface {

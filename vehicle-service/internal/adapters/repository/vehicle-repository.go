@@ -143,19 +143,25 @@ func (c VehicleRepository) updateFailureReason(ctx context.Context, id int64) er
 
 func (c VehicleRepository) toModels(vehicle entity.Vehicle) models.Vehicle {
 	return models.Vehicle{
-		ID:        vehicle.ID,
-		Status:    vehicle.Status,
-		CreatedAt: vehicle.CreatedAt,
-		UpdatedAt: vehicle.UpdatedAt,
+		ID:              vehicle.ID,
+		Vin:             vehicle.Vin,
+		LicensePlate:    vehicle.LicensePlate,
+		WarrantyEndDate: vehicle.WarrantyEndDate,
+		Status:          vehicle.Status,
+		CreatedAt:       vehicle.CreatedAt,
+		UpdatedAt:       vehicle.UpdatedAt,
 	}
 }
 
 func (c VehicleRepository) toDomain(model models.Vehicle) entity.Vehicle {
 	return entity.Vehicle{
-		ID:        model.ID,
-		Status:    model.Status,
-		CreatedAt: model.CreatedAt,
-		UpdatedAt: model.UpdatedAt,
+		ID:              model.ID,
+		Vin:             model.Vin,
+		LicensePlate:    model.LicensePlate,
+		WarrantyEndDate: model.WarrantyEndDate,
+		Status:          model.Status,
+		CreatedAt:       model.CreatedAt,
+		UpdatedAt:       model.UpdatedAt,
 	}
 }
 
