@@ -27,9 +27,8 @@ func (c VehicleCustomerRepository) AssignVehicleToCustomer(ctx context.Context, 
 		// Vehicle:    models.Vehicle{},
 		OwnedFrom: date,
 		// OwnedTo:   time.Time{},
-		Status:    constants.StatusActive,
+		Status:    constants.OwnershipCurrent,
 		CreatedAt: date,
-		UpdatedAt: date,
 	}
 
 	err := database_provider.DBFromContext(ctx, c.db).Create(&model).Error
@@ -62,7 +61,7 @@ func (c VehicleCustomerRepository) GetCustomerVehicle(ctx context.Context, custo
 func (c VehicleCustomerRepository) UnassignVehicleFromCustomer(ctx context.Context, vehicleID int64, customerID int64, date time.Time) error {
 	db := database_provider.DBFromContext(ctx, c.db)
 	var model models.CustomerVehicle
-	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("vehicle_id = ? AND status = ?", vehicleID, constants.StatusActive).First(&model).Error
+	err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("vehicle_id = ? AND status = ?", vehicleID, constants.OwnershipCurrent).First(&model).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ports.ErrNotFound
@@ -76,7 +75,7 @@ func (c VehicleCustomerRepository) UnassignVehicleFromCustomer(ctx context.Conte
 		Where("id = ?", model.ID).
 		Updates(map[string]any{
 			"owned_to": date,
-			"status":   constants.StatusSold,
+			"status":   constants.OwnershipTransferred,
 		}).Error
 }
 
@@ -97,7 +96,6 @@ func (c VehicleCustomerRepository) toDomain(model models.CustomerVehicle) entity
 		OwnedTo:    model.OwnedTo,
 		Status:     model.Status,
 		CreatedAt:  model.CreatedAt,
-		UpdatedAt:  model.UpdatedAt,
 	}
 }
 func (c VehicleCustomerRepository) toModel(e entity.CustomerVehicle) models.CustomerVehicle {
@@ -118,7 +116,6 @@ func (c VehicleCustomerRepository) toModel(e entity.CustomerVehicle) models.Cust
 		OwnedTo:   e.OwnedTo,
 		Status:    e.Status,
 		CreatedAt: e.CreatedAt,
-		UpdatedAt: e.UpdatedAt,
 	}
 }
 

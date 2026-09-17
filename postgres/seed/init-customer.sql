@@ -1,3 +1,5 @@
+\connect customer_db
+
 INSERT INTO customer (name, email, phone, birthday, status) VALUES
   ('Emory Bailey Kling', 'Emory.Kling66@hotmail.com', '+17716399725', '1949-07-16', 'ACTIVE'),
   ('Elmo Bailey Heidenreich', 'Elmo-Heidenreich@yahoo.com', '+17263304079', '1987-04-30', 'ACTIVE'),

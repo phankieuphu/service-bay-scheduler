@@ -37,6 +37,7 @@ func (v *VehicleService) GetVehicle(ctx context.Context, vehicleID int64) (entit
 
 // TransferVehicle implements [ports.VehicleService].
 func (v *VehicleService) TransferVehicle(ctx context.Context, transferVehicle entity.TransferVehicle) error {
+	// call customer service to validate customer id
 	// update the transfer
 	err := v.txManager.RunInTx(ctx, func(ctx context.Context) error {
 		err := v.vehicleCustomerRepository.UnassignVehicleFromCustomer(ctx, transferVehicle.VehicleID, transferVehicle.From, transferVehicle.Date)
