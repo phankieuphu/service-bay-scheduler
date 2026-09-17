@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - postgres/secret.yaml
+  - postgres/statefulset.yaml
+  - zookeeper/deployment.yaml
+  - kafka/deployment.yaml
+  - redis/deployment.yaml
+  - prometheus/configmap.yaml
+  - prometheus/deployment.yaml
+  - grafana/configmap.yaml
+  - grafana/deployment.yaml
+  - customer-service/deployment.yaml
+  - vehicle-service/deployment.yaml

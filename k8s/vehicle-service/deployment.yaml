@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vehicle-service-config
+  namespace: service-bay
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: vehicle_db
+  DB_SSLMODE: disable
+  API_PORT: "8081"
+  KAFKA_BROKERS: kafka:9092
+  KAFKA_PRODUCER_TOPIC: vehicle.events
+  KAFKA_CONSUMER_TOPIC: identity.user-events
+  KAFKA_CONSUMER_GROUP: vehicle-service
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vehicle-service
+  namespace: service-bay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vehicle-service
+  template:
+    metadata:
+      labels:
+        app: vehicle-service
+    spec:
+      containers:
+        - name: vehicle-service
+          image: vehicle-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: vehicle-service-config
+          env:
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vehicle-service
+  namespace: service-bay
+spec:
+  type: NodePort
+  selector:
+    app: vehicle-service
+  ports:
+    - port: 8081
+      targetPort: 8081
+      nodePort: 30081
