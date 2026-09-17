@@ -70,3 +70,17 @@ CREATE TABLE vehicle_material (
 
 CREATE INDEX idx_veh_material_vehicle  ON vehicle_material(vehicle_id);
 CREATE INDEX idx_veh_material_material ON vehicle_material(material_id);
+
+
+CREATE TABLE outbox_message (
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    topic        varchar(255) NOT NULL,
+    message_key  varchar(255) NOT NULL,
+    payload      jsonb NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    published_at timestamptz
+);
+
+-- Partial index so the relay's poll (WHERE published_at IS NULL) stays
+-- cheap regardless of how many published rows have piled up.
+CREATE INDEX idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;

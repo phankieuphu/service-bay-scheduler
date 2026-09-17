@@ -1,6 +1,6 @@
 \connect vehicle_db
 
-CREATE TABLE vehicle_model (
+CREATE TABLE IF NOT EXISTS vehicle_model (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     make       varchar(100) NOT NULL,
     model      varchar(100) NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE vehicle_model (
     UNIQUE (make, model, year)
 );
 
-CREATE TABLE vehicle (
+CREATE TABLE IF NOT EXISTS vehicle (
     id                BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vin               varchar(17) NOT NULL UNIQUE,
     license_plate     varchar(20),
@@ -21,9 +21,9 @@ CREATE TABLE vehicle (
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_vehicle_model ON vehicle(vehicle_model_id);
+CREATE INDEX IF NOT EXISTS idx_vehicle_model ON vehicle(vehicle_model_id);
 
-CREATE TABLE customer_vehicle (
+CREATE TABLE IF NOT EXISTS customer_vehicle (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_id BIGINT NOT NULL,
     vehicle_id  BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE RESTRICT,
@@ -35,13 +35,13 @@ CREATE TABLE customer_vehicle (
     CHECK (owned_to IS NULL OR owned_to >= owned_from)
 );
 
-CREATE INDEX idx_cust_vehicle_customer ON customer_vehicle(customer_id);
-CREATE INDEX idx_cust_vehicle_vehicle  ON customer_vehicle(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_cust_vehicle_customer ON customer_vehicle(customer_id);
+CREATE INDEX IF NOT EXISTS idx_cust_vehicle_vehicle  ON customer_vehicle(vehicle_id);
 
-CREATE UNIQUE INDEX uq_vehicle_current_owner
+CREATE UNIQUE INDEX IF NOT EXISTS uq_vehicle_current_owner
     ON customer_vehicle(vehicle_id) WHERE status = 'CURRENT';
 
-CREATE TABLE vehicle_material (
+CREATE TABLE IF NOT EXISTS vehicle_material (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vehicle_id   BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE CASCADE,
     material_id  BIGINT NOT NULL,
@@ -51,8 +51,8 @@ CREATE TABLE vehicle_material (
     UNIQUE (vehicle_id, material_id)
 );
 
-CREATE INDEX idx_veh_material_vehicle  ON vehicle_material(vehicle_id);
-CREATE INDEX idx_veh_material_material ON vehicle_material(material_id);
+CREATE INDEX IF NOT EXISTS idx_veh_material_vehicle  ON vehicle_material(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_veh_material_material ON vehicle_material(material_id);
 
 INSERT INTO vehicle_model (make, model, year) VALUES
   ('Vauxhall', 'Impala', 2019),

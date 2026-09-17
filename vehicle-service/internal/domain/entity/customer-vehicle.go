@@ -10,8 +10,7 @@ type CustomerVehicle struct {
 	Vehicle    Vehicle
 	CustomerID int64
 	OwnedFrom  time.Time
-	OwnedTo    time.Time
-	Status     constants.VehicleStatus
+	OwnedTo    *time.Time
+	Status     constants.OwnershipStatus
 	CreatedAt  time.Time
-	UpdatedAt  time.Time
 }
