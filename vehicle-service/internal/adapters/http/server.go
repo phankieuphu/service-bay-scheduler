@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"vehicle-service/config"
 	"vehicle-service/internal/adapters/http/handler"
+	"vehicle-service/internal/adapters/metrics"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
@@ -19,7 +21,8 @@ type Server struct {
 func NewServer(cfg config.API, accountService ports.VehicleService) *Server {
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
-
+	engine.Use(metrics.PrometheusMiddleWare())
+	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	v1 := engine.Group("/api/v1")
 	handler.NewVehicleHandler(accountService).RegisterRoutes(v1)
 

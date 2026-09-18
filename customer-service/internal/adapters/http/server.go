@@ -4,6 +4,7 @@ import (
 	"context"
 	"customer-service/config"
 	"customer-service/internal/adapters/http/handler"
+	"customer-service/internal/adapters/metrics"
 	"customer-service/internal/domain/ports"
 	"customer-service/pkg/logger"
 	"net/http"
@@ -19,7 +20,7 @@ type Server struct {
 func NewServer(cfg config.API, accountService ports.CustomerService) *Server {
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
-
+	engine.Use(metrics.PrometheusMiddleWare())
 	v1 := engine.Group("/api/v1")
 	handler.NewCustomerHandler(accountService).RegisterRoutes(v1)
 
