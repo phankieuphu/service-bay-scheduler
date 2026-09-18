@@ -52,6 +52,65 @@ docker compose up -d
 
 ---
 
+### Kubernetes Setup
+
+All manifests live under [k8s/](k8s/) and are wired together with a `kustomization.yaml`. Everything runs in the `service-bay` namespace.
+
+1. Build the local images (the manifests reference `:local` tags, so a local cluster like `minikube` or `kind` needs to load them itself):
+
+```bash
+docker build -t customer-service:local ./customer-service
+docker build -t vehicle-service:local ./vehicle-service
+docker build -t service-bay-postgres:local ./postgres
+```
+
+If you're using `minikube`, point Docker at the cluster's daemon before building (or `minikube image load` afterwards):
+
+```bash
+eval $(minikube docker-env)
+```
+
+For `kind`, load the images into the cluster instead:
+
+```bash
+kind load docker-image customer-service:local vehicle-service:local service-bay-postgres:local
+```
+
+2. Apply all manifests via Kustomize:
+
+```bash
+kubectl apply -k k8s/
+```
+
+3. Check that everything is up:
+
+```bash
+kubectl get pods -n service-bay
+```
+
+4. Access the services (exposed as `NodePort`):
+
+| Service          | Port  |
+|------------------|-------|
+| customer-service | 30080 |
+| vehicle-service  | 30081 |
+| prometheus       | 30090 |
+| grafana          | 30030 |
+
+With `minikube`, get a reachable URL for each with:
+
+```bash
+minikube service customer-service -n service-bay --url
+```
+
+5. Tear down:
+
+```bash
+kubectl delete -k k8s/
+```
+
+---
+
 ## Initializing a New Data Flow
 
 ### 1. Define Data Sources
