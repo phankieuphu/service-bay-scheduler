@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 	"vehicle-service/internal/adapters/http/dto"
 	"vehicle-service/internal/domain/entity"
@@ -60,4 +61,23 @@ func (h *VehicleHandler) TransferVehicle(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (h *VehicleHandler) GetVehicle(c *gin.Context) {}
+func (h *VehicleHandler) GetVehicle(c *gin.Context) {
+	vehicleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid vehicle id"})
+		return
+	}
+
+	vehicle, err := h.service.GetVehicle(c.Request.Context(), vehicleID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ports.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.NewVehicleResponseDTO(vehicle))
+}
