@@ -9,6 +9,7 @@ import (
 	"customer-service/pkg/times"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -217,6 +218,117 @@ func TestCustomer_DeleteCustomer(t *testing.T) {
 			}
 			if _, err := time.Parse(times.WireLayout, event.DeletedAt); err != nil || !strings.HasSuffix(event.DeletedAt, "Z") || len(event.DeletedAt) != len("2006-01-02T15:04:05.000Z") {
 				t.Fatalf("deleted_at %q is not UTC millisecond format", event.DeletedAt)
+			}
+		})
+	}
+}
+
+func TestCustomer_UpdateCustomer(t *testing.T) {
+	tests := []struct {
+		name               string
+		customerID         int
+		updateCustomer     entity.Customer
+		updateCustomerFunc func(ctx context.Context, customer entity.Customer) error
+		wanErr             bool
+	}{
+		{
+			name:       "Customer not found",
+			customerID: 1,
+			updateCustomerFunc: func(ctx context.Context, customer entity.Customer) error {
+				return errors.New("customer not found")
+			},
+			wanErr: true,
+			updateCustomer: entity.Customer{
+				Name: "Leo",
+			},
+		},
+		{
+			name:       "update success",
+			customerID: 99,
+			updateCustomerFunc: func(ctx context.Context, customer entity.Customer) error {
+				if customer.ID != 99 {
+					return fmt.Errorf("expected repository to get ID 99 from the path, got %d", customer.ID)
+				}
+				return nil
+			},
+			updateCustomer: entity.Customer{
+				ID:       1, // must be ignored in favour of the path ID
+				Name:     "Lion",
+				BirthDay: time.Date(2020, 9, 24, 8, 15, 30, 123_000_000, time.UTC),
+			},
+			wanErr: false,
+		},
+		{
+			name:       "no thing update",
+			customerID: 99,
+			updateCustomerFunc: func(ctx context.Context, customer entity.Customer) error {
+				return nil
+			},
+			updateCustomer: entity.Customer{},
+			wanErr:         true,
+		},
+		{
+			name:       "birth day in the feature",
+			customerID: 99,
+			updateCustomerFunc: func(ctx context.Context, customer entity.Customer) error {
+				if customer.ID != 99 {
+					return fmt.Errorf("expected repository to get ID 99 from the path, got %d", customer.ID)
+				}
+				return nil
+			},
+			updateCustomer: entity.Customer{
+				ID:       1, // must be ignored in favour of the path ID
+				Name:     "Panther",
+				BirthDay: time.Date(2027, 9, 24, 8, 15, 30, 123_000_000, time.UTC),
+			},
+			wanErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &MockCustomerRepository{
+				UpdateFunc: tt.updateCustomerFunc,
+			}
+			txManage := &MockTxMangerRepository{
+				RunInTxFunc: func(ctx context.Context, fn func(ctx context.Context) error) error {
+					return fn(ctx)
+				},
+			}
+			var written []entity.OutboxMessage
+			outBoxRepo := &MockOutBoxRepository{
+				CreateFunc: func(ctx context.Context, message entity.OutboxMessage) error {
+					written = append(written, message)
+					return nil
+				},
+			}
+			service := NewCustomerService(config.Config{}, repo, outBoxRepo, txManage, &MockCacheRepository{})
+			err := service.UpdateProfile(t.Context(), int64(tt.customerID), tt.updateCustomer)
+			if tt.wanErr {
+				if err == nil {
+					t.Fatal("expected error but got nill")
+				}
+				if len(written) != 0 {
+					t.Fatalf("expected no outbox message on failure, got %d", len(written))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error but got %s", err.Error())
+				return
+			}
+			if len(written) != 1 {
+				t.Fatalf("expected 1 outbox message, got %d", len(written))
+			}
+			msg := written[0]
+			if msg.Topic != constants.CustomerUpdate || msg.Key != "99" {
+				t.Fatalf("unexpected topic/key: %q/%q", msg.Topic, msg.Key)
+			}
+			var event map[string]any
+			if err := json.Unmarshal(msg.Payload, &event); err != nil {
+				t.Fatalf("payload is not valid JSON: %v", err)
+			}
+			if event["id"] != float64(99) || event["name"] != "Lion" || event["birth_day"] != "2020-09-24" {
+				t.Fatalf("unexpected event payload: %s", msg.Payload)
 			}
 		})
 	}

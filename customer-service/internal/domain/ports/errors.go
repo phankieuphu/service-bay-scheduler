@@ -11,4 +11,8 @@ var (
 	// concurrent write: either a unique constraint (email) was violated, or
 	// an update was based on stale data (someone else updated the row first).
 	ErrConflict = errors.New("customer: conflict")
+
+	// ErrInvalidInput is returned when a request is well-formed but carries
+	// nothing the service can act on (e.g. an update with no fields set).
+	ErrInvalidInput = errors.New("customer: invalid input")
 )

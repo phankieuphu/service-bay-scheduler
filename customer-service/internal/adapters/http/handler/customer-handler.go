@@ -85,22 +85,28 @@ func (h *CustomerHandler) UpdateCustomerProfile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
-	}
-	updateCustomer := entity.Customer{
-		Name:     req.Name,
-		BirthDay: req.BirthDay,
-	}
-	err = h.service.UpdateProfile(c, id, updateCustomer)
-	if err != nil {
-		if errors.Is(err, ports.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusNoContent, gin.H{"messages": "updated success"})
-
+	updateCustomer := entity.Customer{
+		Name:      req.Name,
+		BirthDay:  req.BirthDay,
+		UpdatedAt: req.UpdatedAt,
+	}
+	err = h.service.UpdateProfile(c.Request.Context(), id, updateCustomer)
+	if err != nil {
+		switch {
+		case errors.Is(err, ports.ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, ports.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, ports.ErrConflict):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // ListCustomers handles cursor-based pagination via the `cursor` and `limit`

@@ -69,8 +69,48 @@ func (e *CustomerService) DeleteProfile(ctx context.Context, customerID int64) e
 }
 
 // UpdateProfile implements [ports.CustomerService].
+// customerID (from the URL path) is the only trusted source of identity; any
+// ID on payload is overwritten. payload.UpdatedAt must be the value the caller
+// last read, for the repository's optimistic lock.
 func (e *CustomerService) UpdateProfile(ctx context.Context, customerID int64, payload entity.Customer) error {
-	panic("unimplemented")
+	if payload.Name == "" && payload.BirthDay.IsZero() {
+		return fmt.Errorf("%w: nothing to update", ports.ErrInvalidInput)
+	}
+	payload.ID = customerID
+
+	err := e.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		if err := e.repository.Update(ctx, payload); err != nil {
+			return err
+		}
+
+		event := events.UpdateCustomerEvents{
+			ID:        customerID,
+			Name:      payload.Name,
+			UpdatedAt: times.NewTime(time.Now()),
+		}
+		if !payload.BirthDay.IsZero() {
+			event.BirthDay = payload.BirthDay.Format(time.DateOnly)
+		}
+		if payload.BirthDay.After(time.Now()) {
+			return errors.New("birthday must be before current date")
+		}
+		eventPayload, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+
+		return e.outbox.Create(ctx, entity.OutboxMessage{
+			Topic:   constants.CustomerUpdate,
+			Key:     strconv.FormatInt(customerID, 10),
+			Payload: eventPayload,
+		})
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to update customer", "customer_id", customerID, "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // CreateCustomer implements [ports.CustomerService]. The customer row and
