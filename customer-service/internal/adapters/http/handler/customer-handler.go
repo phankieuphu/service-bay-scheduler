@@ -155,14 +155,16 @@ func (h *CustomerHandler) DeleteProfile(c *gin.Context) {
 		return
 	}
 
-	err = h.service.DeleteProfile(c, id)
+	err = h.service.DeleteProfile(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, ports.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	c.JSON(http.StatusNoContent, gin.H{"message": "ok"})
+	c.Status(http.StatusNoContent)
 }
 
 func toCustomerDTO(customer entity.Customer) dto.CustomerDTO {

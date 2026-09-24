@@ -36,3 +36,5 @@ CREATE TABLE outbox_message (
 -- Partial index so the relay's poll (WHERE published_at IS NULL) stays
 -- cheap regardless of how many published rows have piled up.
 CREATE INDEX idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;
+
+AFTER TABLE CUSTOMER ADD COLUMN 'delete_at' timestamptz DEFAULT NULL;
