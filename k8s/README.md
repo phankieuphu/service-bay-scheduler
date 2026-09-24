@@ -32,5 +32,6 @@ NodePort services are exposed on the cluster node's IP:
 - vehicle-service: 30081
 - prometheus: 30090
 - grafana: 30030 (admin/admin)
+- flink web UI: 30082
 
 postgres, zookeeper, kafka and redis are ClusterIP-only, matching their internal-only role in `docker-compose.yml`.

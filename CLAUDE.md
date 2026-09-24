@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Service Bay is a microservices system for a vehicle service/booking business. Only two services are implemented so far: **customer-service** and **vehicle-service**, each an independent Go module living in its own top-level directory. Both are near-identical clones of the same hexagonal-architecture template (same layer names, same file layout, same patterns) — understanding one gets you 90% of the other. Supporting infra (Postgres, Kafka, Redis, Prometheus, Grafana) is wired up in `docker-compose.yml` and mirrored under `k8s/`.
+Service Bay is a microservices system for a vehicle service/booking business. Only two services are implemented so far: **customer-service** and **vehicle-service**, each an independent Go module living in its own top-level directory. Both are near-identical clones of the same hexagonal-architecture template (same layer names, same file layout, same patterns) — understanding one gets you 90% of the other. Supporting infra (Postgres, Kafka, Redis, Flink, Prometheus, Grafana) is wired up in `docker-compose.yml` and mirrored under `k8s/`.
 
 The target system-wide service map (identity, customer, vehicle, dealership, scheduler, billing, notification, report services) is documented in [docs/architecture-design.md](docs/architecture-design.md) — read it for the intended event contracts and cross-service data-ownership rules before adding a new service or a new Kafka event.
 
@@ -26,7 +26,7 @@ golangci-lint run                       # not installed in this environment; CI 
 Local run (either service): copy `.env.example` to `.env` — **note it's a stale generic template** (MySQL/AWS SQS vars that no longer apply); the real, current env vars are defined in `config/config.go` of each service (Postgres/Kafka/Redis/API/Logger). Then run `go run ./cmd/server`, or bring up the full stack:
 
 ```bash
-docker compose up -d          # customer-service:8080, vehicle-service:8081, postgres, kafka, redis, prometheus:30090-equivalent, grafana
+docker compose up -d          # customer-service:8080, vehicle-service:8081, postgres, kafka, redis, flink UI:8082, prometheus:30090-equivalent, grafana
 kubectl apply -k k8s/         # namespace `service-bay`; see README.md for building/loading local images first
 ```
 
