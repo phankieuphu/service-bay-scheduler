@@ -32,3 +32,12 @@ type ListCustomersResponseDTO struct {
 	NextCursor int64         `json:"next_cursor,omitempty"`
 	HasMore    bool          `json:"has_more"`
 }
+
+// UpdateProfileDTO: UpdatedAt must be the updated_at the client last read
+// (from GET /customers/:id); the update is rejected with 409 if the customer
+// has changed since.
+type UpdateProfileDTO struct {
+	Name      string    `json:"name"`
+	BirthDay  time.Time `json:"birth_day" binding:"-"`
+	UpdatedAt time.Time `json:"updated_at" binding:"required"`
+}

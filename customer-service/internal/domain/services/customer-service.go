@@ -5,8 +5,10 @@ import (
 	"customer-service/config"
 	"customer-service/internal/constants"
 	"customer-service/internal/domain/entity"
+	"customer-service/internal/domain/events"
 	"customer-service/internal/domain/ports"
 	"customer-service/pkg/logger"
+	"customer-service/pkg/times"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +36,81 @@ type CustomerService struct {
 	outbox     ports.OutboxRepository
 	txManager  ports.TxManager
 	cache      ports.Cache
+}
+
+// DeleteProfile implements [ports.CustomerService].
+func (e *CustomerService) DeleteProfile(ctx context.Context, customerID int64) error {
+	// update all vehicle from this customer to un_active status
+	err := e.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		if err := e.repository.SoftDelete(ctx, customerID); err != nil {
+			return err
+		}
+
+		payload, err := json.Marshal(events.DeleteCustomerEvent{
+			ID:        customerID,
+			DeletedAt: times.NewTime(time.Now()),
+		})
+		if err != nil {
+			return err
+		}
+
+		return e.outbox.Create(ctx, entity.OutboxMessage{
+			Topic:   constants.CustomerDelete,
+			Key:     strconv.FormatInt(customerID, 10),
+			Payload: payload,
+		})
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to delete customer", "customer_id", customerID, "error", err)
+		return err
+	}
+
+	return nil
+}
+
+// UpdateProfile implements [ports.CustomerService].
+// customerID (from the URL path) is the only trusted source of identity; any
+// ID on payload is overwritten. payload.UpdatedAt must be the value the caller
+// last read, for the repository's optimistic lock.
+func (e *CustomerService) UpdateProfile(ctx context.Context, customerID int64, payload entity.Customer) error {
+	if payload.Name == "" && payload.BirthDay.IsZero() {
+		return fmt.Errorf("%w: nothing to update", ports.ErrInvalidInput)
+	}
+	payload.ID = customerID
+
+	err := e.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		if err := e.repository.Update(ctx, payload); err != nil {
+			return err
+		}
+
+		event := events.UpdateCustomerEvents{
+			ID:        customerID,
+			Name:      payload.Name,
+			UpdatedAt: times.NewTime(time.Now()),
+		}
+		if !payload.BirthDay.IsZero() {
+			event.BirthDay = payload.BirthDay.Format(time.DateOnly)
+		}
+		if payload.BirthDay.After(time.Now()) {
+			return errors.New("birthday must be before current date")
+		}
+		eventPayload, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+
+		return e.outbox.Create(ctx, entity.OutboxMessage{
+			Topic:   constants.CustomerUpdate,
+			Key:     strconv.FormatInt(customerID, 10),
+			Payload: eventPayload,
+		})
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to update customer", "customer_id", customerID, "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // CreateCustomer implements [ports.CustomerService]. The customer row and

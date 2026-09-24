@@ -23,6 +23,8 @@ func (h *CustomerHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/customer", h.CreateCustomer)
 	r.GET("/customer", h.ListCustomers)
 	r.GET("/customer/:id", h.GetCustomer)
+	r.PUT("/customer/:id", h.UpdateCustomerProfile)
+	r.DELETE("/customer/:id", h.DeleteProfile)
 }
 
 func (h *CustomerHandler) CreateCustomer(c *gin.Context) {
@@ -72,6 +74,41 @@ func (h *CustomerHandler) GetCustomer(c *gin.Context) {
 	c.JSON(http.StatusOK, toCustomerDTO(customer))
 }
 
+func (h *CustomerHandler) UpdateCustomerProfile(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalided customer id"})
+		return
+	}
+	var req dto.UpdateProfileDTO
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+	updateCustomer := entity.Customer{
+		Name:      req.Name,
+		BirthDay:  req.BirthDay,
+		UpdatedAt: req.UpdatedAt,
+	}
+	err = h.service.UpdateProfile(c.Request.Context(), id, updateCustomer)
+	if err != nil {
+		switch {
+		case errors.Is(err, ports.ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, ports.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, ports.ErrConflict):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 // ListCustomers handles cursor-based pagination via the `cursor` and `limit`
 // query params. `cursor` is the id of the last customer the caller has
 // already seen (omit/0 for the first page); the response's `next_cursor`
@@ -108,6 +145,24 @@ func (h *CustomerHandler) ListCustomers(c *gin.Context) {
 		NextCursor: page.NextCursor,
 		HasMore:    page.HasMore,
 	})
+}
+
+// soft delete customer profile
+func (h *CustomerHandler) DeleteProfile(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid customer id"})
+		return
+	}
+
+	err = h.service.DeleteProfile(c, id)
+	if err != nil {
+		if errors.Is(err, ports.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+	c.JSON(http.StatusNoContent, gin.H{"message": "ok"})
 }
 
 func toCustomerDTO(customer entity.Customer) dto.CustomerDTO {

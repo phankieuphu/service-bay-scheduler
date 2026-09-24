@@ -20,6 +20,26 @@ type VehicleService struct {
 	cache                     ports.Cache
 }
 
+// GetVehicleMaterials implements [ports.VehicleService].
+func (v *VehicleService) GetVehicleMaterials(ctx context.Context, vehicleID int64) (entity.VehicleMaterial, error) {
+	panic("unimplemented")
+}
+
+// InitialVehicleOwner implements [ports.VehicleService].
+func (v *VehicleService) InitialVehicleOwner(ctx context.Context, vehicleID int64, owner int64) error {
+	panic("unimplemented")
+}
+
+// RegisterVehicle implements [ports.VehicleService].
+func (v *VehicleService) RegisterVehicle(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error) {
+	panic("unimplemented")
+}
+
+// UpdateVehicleStatus implements [ports.VehicleService].
+func (v *VehicleService) UpdateVehicleStatus(ctx context.Context, vehicleID int64, status constants.VehicleStatus) error {
+	panic("unimplemented")
+}
+
 // GetCustomerVehicle implements [ports.VehicleService].
 func (v *VehicleService) GetCustomerVehicle(ctx context.Context, customerID int) ([]entity.Vehicle, error) {
 	panic("unimplemented")
