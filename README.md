@@ -96,6 +96,7 @@ kubectl get pods -n service-bay
 | vehicle-service  | 30081 |
 | prometheus       | 30090 |
 | grafana          | 30030 |
+| flink (web UI)   | 30082 |
 
 With `minikube`, get a reachable URL for each with:
 

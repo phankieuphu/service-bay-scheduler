@@ -8,6 +8,9 @@ resources:
   - zookeeper/deployment.yaml
   - kafka/deployment.yaml
   - redis/deployment.yaml
+  - flink/configmap.yaml
+  - flink/jobmanager.yaml
+  - flink/taskmanager.yaml
   - prometheus/configmap.yaml
   - prometheus/deployment.yaml
   - grafana/configmap.yaml

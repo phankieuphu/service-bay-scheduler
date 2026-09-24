@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: service-bay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink
+      component: taskmanager
+  template:
+    metadata:
+      labels:
+        app: flink
+        component: taskmanager
+    spec:
+      containers:
+        - name: taskmanager
+          image: flink:1.20-java17
+          args: ["taskmanager"]
+          envFrom:
+            - configMapRef:
+                name: flink-config
+          ports:
+            - containerPort: 6122
+              name: rpc
+            - containerPort: 9249
+              name: metrics
+---
+# Headless so Prometheus can reach the TaskManager metrics endpoint by DNS name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-taskmanager
+  namespace: service-bay
+spec:
+  clusterIP: None
+  selector:
+    app: flink
+    component: taskmanager
+  ports:
+    - name: metrics
+      port: 9249
+      targetPort: 9249

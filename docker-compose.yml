@@ -117,6 +117,38 @@ services:
     networks:
       - backend
 
+  flink-jobmanager:
+    image: flink:1.20-java17
+    container_name: flink-jobmanager
+    command: jobmanager
+    depends_on:
+      kafka:
+        condition: service_started
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prom.port: 9249
+    ports:
+      - "8082:8081"
+    networks:
+      - backend
+
+  flink-taskmanager:
+    image: flink:1.20-java17
+    container_name: flink-taskmanager
+    command: taskmanager
+    depends_on:
+      - flink-jobmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prom.port: 9249
+    networks:
+      - backend
+
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: prometheus

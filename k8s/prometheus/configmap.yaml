@@ -23,3 +23,7 @@ data:
         metrics_path: /metrics
         static_configs:
           - targets: ["vehicle-service:8081"]
+    
+      - job_name: flink
+        static_configs:
+          - targets: ["flink-jobmanager:9249", "flink-taskmanager:9249"]
