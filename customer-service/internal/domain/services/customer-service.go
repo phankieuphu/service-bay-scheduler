@@ -36,6 +36,16 @@ type CustomerService struct {
 	cache      ports.Cache
 }
 
+// DeleteProfile implements [ports.CustomerService].
+func (e *CustomerService) DeleteProfile(ctx context.Context, customerID int64) error {
+	panic("unimplemented")
+}
+
+// UpdateProfile implements [ports.CustomerService].
+func (e *CustomerService) UpdateProfile(ctx context.Context, customerID int64, payload entity.Customer) error {
+	panic("unimplemented")
+}
+
 // CreateCustomer implements [ports.CustomerService]. The customer row and
 // its CustomerCreated outbox row are written in one transaction, so the
 // event can never be lost or published for a write that got rolled back.
