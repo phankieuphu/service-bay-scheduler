@@ -22,8 +22,12 @@ type CustomerRepository struct {
 
 // SoftDelete implements [ports.CustomerRepository].
 func (c CustomerRepository) SoftDelete(ctx context.Context, id int64) error {
-	if err := database_provider.DBFromContext(ctx, c.db).Delete(&models.Customer{}, id); err != nil {
-		return err.Error
+	result := database_provider.DBFromContext(ctx, c.db).Delete(&models.Customer{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ports.ErrNotFound
 	}
 	return nil
 }
@@ -119,7 +123,7 @@ func (c CustomerRepository) Update(ctx context.Context, customer entity.Customer
 	model := c.toModels(customer)
 
 	result := database_provider.DBFromContext(ctx, c.db).
-		Model(&models.Customer{}).
+		Model(&models.Customer{}).Omit("id").
 		Where("id = ? AND updated_at = ?", model.ID, model.UpdatedAt).
 		Updates(&model)
 	if result.Error != nil {
