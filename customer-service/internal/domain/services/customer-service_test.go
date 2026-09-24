@@ -3,19 +3,24 @@ package services
 import (
 	"context"
 	"customer-service/config"
+	"customer-service/internal/constants"
 	"customer-service/internal/domain/entity"
 	"customer-service/internal/domain/ports"
+	"customer-service/pkg/times"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
 
 type MockCustomerRepository struct {
-	GetByIDFunc func(ctx context.Context, id int64) (entity.Customer, error)
-	CreateFunc  func(ctx context.Context, customer entity.Customer) (entity.Customer, error)
-	ListFunc    func(ctx context.Context, params ports.ListCustomersParams) (ports.CustomerPage, error)
-	UpdateFunc  func(ctx context.Context, customer entity.Customer) error
-	DeleteFunc  func(ctx context.Context, id int64) error
+	GetByIDFunc    func(ctx context.Context, id int64) (entity.Customer, error)
+	CreateFunc     func(ctx context.Context, customer entity.Customer) (entity.Customer, error)
+	ListFunc       func(ctx context.Context, params ports.ListCustomersParams) (ports.CustomerPage, error)
+	UpdateFunc     func(ctx context.Context, customer entity.Customer) error
+	DeleteFunc     func(ctx context.Context, id int64) error
+	SoftDeleteFunc func(ctx context.Context, id int64) error
 }
 
 func (m *MockCustomerRepository) GetByID(ctx context.Context, id int64) (entity.Customer, error) {
@@ -32,6 +37,10 @@ func (m *MockCustomerRepository) Update(ctx context.Context, customer entity.Cus
 }
 func (m *MockCustomerRepository) Delete(ctx context.Context, id int64) error {
 	return m.DeleteFunc(ctx, id)
+}
+
+func (m *MockCustomerRepository) SoftDelete(ctx context.Context, id int64) error {
+	return m.SoftDeleteFunc(ctx, id)
 }
 
 type MockTxMangerRepository struct {
@@ -125,6 +134,89 @@ func TestCustomer_GetCustomer(t *testing.T) {
 			}
 			if result.ID != tt.wantID {
 				t.Fatalf("expected ID %d, got %d", tt.wantID, result.ID)
+			}
+		})
+	}
+}
+
+func TestCustomer_DeleteCustomer(t *testing.T) {
+	tests := []struct {
+		name       string
+		id         int64
+		deleteFunc func(ctx context.Context, id int64) error
+		wantErr    bool
+	}{
+		{
+			name: "customer not found",
+			id:   0,
+			deleteFunc: func(ctx context.Context, id int64) error {
+				return errors.New("customer not found")
+			},
+			wantErr: true,
+		},
+		{
+			name: "deleted and outbox event written",
+			id:   42,
+			deleteFunc: func(ctx context.Context, id int64) error {
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &MockCustomerRepository{
+				SoftDeleteFunc: tt.deleteFunc,
+			}
+			var written []entity.OutboxMessage
+			outbox := &MockOutBoxRepository{
+				CreateFunc: func(ctx context.Context, message entity.OutboxMessage) error {
+					written = append(written, message)
+					return nil
+				},
+			}
+			txManager := &MockTxMangerRepository{
+				RunInTxFunc: func(ctx context.Context, fn func(ctx context.Context) error) error {
+					return fn(ctx)
+				},
+			}
+
+			service := NewCustomerService(config.Config{}, repo, outbox, txManager, &MockCacheRepository{})
+			err := service.DeleteProfile(t.Context(), tt.id)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got nil")
+				}
+				if len(written) != 0 {
+					t.Fatalf("expected no outbox message on failure, got %d", len(written))
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(written) != 1 {
+				t.Fatalf("expected 1 outbox message, got %d", len(written))
+			}
+			msg := written[0]
+			if msg.Topic != constants.CustomerDelete || msg.Key != "42" {
+				t.Fatalf("unexpected topic/key: %q/%q", msg.Topic, msg.Key)
+			}
+
+			var event struct {
+				ID        int64  `json:"id"`
+				DeletedAt string `json:"deleted_at"`
+			}
+			if err := json.Unmarshal(msg.Payload, &event); err != nil {
+				t.Fatalf("payload is not valid JSON: %v", err)
+			}
+			if event.ID != 42 {
+				t.Fatalf("expected id 42, got %d", event.ID)
+			}
+			if _, err := time.Parse(times.WireLayout, event.DeletedAt); err != nil || !strings.HasSuffix(event.DeletedAt, "Z") || len(event.DeletedAt) != len("2006-01-02T15:04:05.000Z") {
+				t.Fatalf("deleted_at %q is not UTC millisecond format", event.DeletedAt)
 			}
 		})
 	}

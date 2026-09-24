@@ -5,8 +5,10 @@ import (
 	"customer-service/config"
 	"customer-service/internal/constants"
 	"customer-service/internal/domain/entity"
+	"customer-service/internal/domain/events"
 	"customer-service/internal/domain/ports"
 	"customer-service/pkg/logger"
+	"customer-service/pkg/times"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,7 +40,32 @@ type CustomerService struct {
 
 // DeleteProfile implements [ports.CustomerService].
 func (e *CustomerService) DeleteProfile(ctx context.Context, customerID int64) error {
-	panic("unimplemented")
+	// update all vehicle from this customer to un_active status
+	err := e.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		if err := e.repository.SoftDelete(ctx, customerID); err != nil {
+			return err
+		}
+
+		payload, err := json.Marshal(events.DeleteCustomerEvent{
+			ID:        customerID,
+			DeletedAt: times.NewTime(time.Now()),
+		})
+		if err != nil {
+			return err
+		}
+
+		return e.outbox.Create(ctx, entity.OutboxMessage{
+			Topic:   constants.CustomerDelete,
+			Key:     strconv.FormatInt(customerID, 10),
+			Payload: payload,
+		})
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to delete customer", "customer_id", customerID, "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // UpdateProfile implements [ports.CustomerService].

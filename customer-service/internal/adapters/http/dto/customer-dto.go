@@ -32,3 +32,8 @@ type ListCustomersResponseDTO struct {
 	NextCursor int64         `json:"next_cursor,omitempty"`
 	HasMore    bool          `json:"has_more"`
 }
+
+type UpdateProfileDTO struct {
+	Name     string    `json:"name"`
+	BirthDay time.Time `json:"birth_day" binding:"-"`
+}

@@ -11,4 +11,5 @@ type CustomerRepository interface {
 	List(ctx context.Context, params ListCustomersParams) (CustomerPage, error)
 	Update(ctx context.Context, customer entity.Customer) error
 	Delete(ctx context.Context, id int64) error
+	SoftDelete(ctx context.Context, id int64) error
 }

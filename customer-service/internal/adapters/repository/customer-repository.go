@@ -20,6 +20,14 @@ type CustomerRepository struct {
 	db *gorm.DB
 }
 
+// SoftDelete implements [ports.CustomerRepository].
+func (c CustomerRepository) SoftDelete(ctx context.Context, id int64) error {
+	if err := database_provider.DBFromContext(ctx, c.db).Delete(&models.Customer{}, id); err != nil {
+		return err.Error
+	}
+	return nil
+}
+
 // Create implements [ports.CustomerRepository].
 func (c CustomerRepository) Create(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
 	model := c.toModels(customer)

@@ -3,6 +3,8 @@ package models
 import (
 	"customer-service/internal/constants"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Customer struct {
@@ -14,6 +16,7 @@ type Customer struct {
 	Status    constants.CustomerStatus `json:"status" gorm:"column:status;type:varchar;size:20"`
 	CreatedAt time.Time                `json:"created_at" gorm:"column:created_at;type:timestamp;autoCreateTime"`
 	UpdatedAt time.Time                `json:"updated_at" gorm:"column:updated_at;type:timestamp;autoUpdateTime"`
+	DeleteAt  gorm.DeletedAt           `gorm:"index"`
 }
 
 func (c Customer) TableName() string {
