@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
@@ -21,6 +22,7 @@ func NewServer(cfg config.API, accountService ports.CustomerService) *Server {
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
 	engine.Use(metrics.PrometheusMiddleWare())
+	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	v1 := engine.Group("/api/v1")
 	handler.NewCustomerHandler(accountService).RegisterRoutes(v1)
 
