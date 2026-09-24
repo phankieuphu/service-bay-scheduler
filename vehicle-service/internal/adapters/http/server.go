@@ -21,6 +21,7 @@ type Server struct {
 func NewServer(cfg config.API, accountService ports.VehicleService) *Server {
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
+	engine.Use(corsMiddleware())
 	engine.Use(metrics.PrometheusMiddleWare())
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	v1 := engine.Group("/api/v1")
@@ -46,4 +47,19 @@ func (s *Server) Start() {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
+}
+
+// corsMiddleware allows the frontend dev server (a different origin) to call
+// this API directly; there's no gateway in front of these services yet.
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
 }
