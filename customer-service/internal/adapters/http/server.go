@@ -7,6 +7,7 @@ import (
 	"customer-service/internal/adapters/metrics"
 	"customer-service/internal/domain/ports"
 	"customer-service/pkg/logger"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,8 +19,12 @@ type Server struct {
 	engine     *gin.Engine
 }
 
-func NewServer(cfg config.API, accountService ports.CustomerService) *Server {
+func NewServer(cfg config.API, accountService ports.CustomerService, health *handler.HealthHandler) *Server {
 	engine := gin.New()
+	// Probes are registered before engine.Use, so they skip the middleware:
+	// kubelet hits them every few seconds, which would flood the access log
+	// and the request metrics.
+	health.RegisterRoutes(engine)
 	engine.Use(gin.Logger(), gin.Recovery())
 	engine.Use(corsMiddleware())
 	engine.Use(metrics.PrometheusMiddleWare())
@@ -38,11 +43,14 @@ func NewServer(cfg config.API, accountService ports.CustomerService) *Server {
 	}
 }
 
-func (s *Server) Start() {
+// Start blocks serving requests until Shutdown is called (returning nil)
+// or the listener fails (returning the error).
+func (s *Server) Start() error {
 	logger.Info("HTTP server listening", "addr", s.httpServer.Addr)
-	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Fatal("HTTP server error", "error", err)
+	if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
 	}
+	return nil
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {

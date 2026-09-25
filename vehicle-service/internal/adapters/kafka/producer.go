@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"vehicle-service/config"
 	"vehicle-service/pkg/logger"
 
@@ -9,6 +10,7 @@ import (
 )
 
 type Producer struct {
+	client   sarama.Client
 	producer sarama.SyncProducer
 }
 
@@ -19,13 +21,18 @@ func NewProducer(cfg config.Kafka) (*Producer, error) {
 	saramaCfg.Producer.RequiredAcks = sarama.WaitForAll
 	saramaCfg.Producer.Retry.Max = 3
 
-	p, err := sarama.NewSyncProducer(cfg.Brokers, saramaCfg)
+	client, err := sarama.NewClient(cfg.Brokers, saramaCfg)
 	if err != nil {
+		return nil, err
+	}
+	p, err := sarama.NewSyncProducerFromClient(client)
+	if err != nil {
+		client.Close()
 		return nil, err
 	}
 
 	logger.Info("Kafka producer connected", "brokers", cfg.Brokers)
-	return &Producer{producer: p}, nil
+	return &Producer{client: client, producer: p}, nil
 }
 
 func (p *Producer) Publish(_ context.Context, topic, key string, payload []byte) error {
@@ -42,6 +49,16 @@ func (p *Producer) Publish(_ context.Context, topic, key string, payload []byte)
 	return nil
 }
 
+// Ping asks the cluster for its current controller, a metadata round trip
+// that fails if no broker is reachable. sarama takes no ctx, so callers
+// enforce their own deadline.
+func (p *Producer) Ping(_ context.Context) error {
+	_, err := p.client.RefreshController()
+	return err
+}
+
+// Close closes the producer, then the client it was built from (a producer
+// created from a client doesn't close that client itself).
 func (p *Producer) Close() error {
-	return p.producer.Close()
+	return errors.Join(p.producer.Close(), p.client.Close())
 }
