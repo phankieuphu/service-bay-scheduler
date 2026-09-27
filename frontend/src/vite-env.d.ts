@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_VEHICLE_API_URL?: string
   readonly VITE_CUSTOMER_API_URL?: string
+  readonly VITE_IDENTITY_API_URL?: string
 }
 
 interface ImportMeta {
