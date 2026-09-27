@@ -71,6 +71,15 @@ func (c VehicleRepository) List(ctx context.Context, params ports.ListVehiclesPa
 	if params.Cursor > 0 {
 		query = query.Where("id > ?", params.Cursor)
 	}
+	if params.Vin != "" {
+		query = query.Where("vin = ?", params.Vin)
+	}
+	if params.LicensePlate != "" {
+		query = query.Where("license_plate = ?", params.LicensePlate)
+	}
+	if params.Status != "" {
+		query = query.Where("status = ?", params.Status)
+	}
 
 	if err := query.Find(&rows).Error; err != nil {
 		return ports.VehiclePage{}, err

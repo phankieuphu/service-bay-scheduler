@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 	"vehicle-service/internal/adapters/http/dto"
+	"vehicle-service/internal/constants"
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
@@ -26,6 +28,7 @@ func (h *VehicleHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/customer-vehicle", h.GetCustomerVehicle)
 	r.POST("/transfer", h.TransferVehicle)
 	r.POST("/vehicle", h.RegisterVehicle)
+	r.GET("/vehicle", h.ListVehicles)
 	r.GET("/vehicle/:id", h.GetVehicle)
 }
 
@@ -78,6 +81,44 @@ func (h *VehicleHandler) TransferVehicle(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// ListVehicles handles cursor-based pagination via the `cursor` and `limit`
+// query params (same contract as customer-service's GET /customer), with
+// optional exact-match `vin`, `plate` and `status` filters.
+func (h *VehicleHandler) ListVehicles(c *gin.Context) {
+	cursor, err := strconv.ParseInt(c.DefaultQuery("cursor", "0"), 10, 64)
+	if err != nil || cursor < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cursor"})
+		return
+	}
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	if err != nil || limit < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+		return
+	}
+
+	page, err := h.service.ListVehicles(c.Request.Context(), ports.ListVehiclesParams{
+		Cursor:       cursor,
+		Limit:        limit,
+		Vin:          c.Query("vin"),
+		LicensePlate: c.Query("plate"),
+		Status:       constants.VehicleStatus(strings.ToUpper(c.Query("status"))),
+	})
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	vehicles := make([]dto.VehicleResponseDTO, len(page.Vehicles))
+	for i, vehicle := range page.Vehicles {
+		vehicles[i] = dto.NewVehicleResponseDTO(vehicle)
+	}
+	c.JSON(http.StatusOK, dto.ListVehiclesResponseDTO{
+		Vehicles:   vehicles,
+		NextCursor: page.NextCursor,
+		HasMore:    page.HasMore,
+	})
 }
 
 func (h *VehicleHandler) GetVehicle(c *gin.Context) {

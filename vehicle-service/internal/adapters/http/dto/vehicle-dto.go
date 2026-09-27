@@ -42,3 +42,12 @@ func NewVehicleResponseDTO(v entity.Vehicle) VehicleResponseDTO {
 		UpdatedAt:       v.UpdatedAt,
 	}
 }
+
+// ListVehiclesResponseDTO is a single cursor-paginated page of vehicles.
+// NextCursor is only set when HasMore is true; pass it back as the `cursor`
+// query param to fetch the next page.
+type ListVehiclesResponseDTO struct {
+	Vehicles   []VehicleResponseDTO `json:"vehicles"`
+	NextCursor int64                `json:"next_cursor,omitempty"`
+	HasMore    bool                 `json:"has_more"`
+}

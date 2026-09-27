@@ -115,6 +115,46 @@ func (v *VehicleService) GetVehicle(ctx context.Context, vehicleID int64) (entit
 	return vehicle, nil
 }
 
+const (
+	defaultListLimit = 20
+	maxListLimit     = 100
+)
+
+// ListVehicles implements [ports.VehicleService].
+func (v *VehicleService) ListVehicles(ctx context.Context, params ports.ListVehiclesParams) (ports.VehiclePage, error) {
+	if params.Cursor < 0 {
+		params.Cursor = 0
+	}
+	switch {
+	case params.Limit <= 0:
+		params.Limit = defaultListLimit
+	case params.Limit > maxListLimit:
+		params.Limit = maxListLimit
+	}
+
+	var err error
+	if params.Vin != "" {
+		if params.Vin, err = normalizeVin(params.Vin); err != nil {
+			return ports.VehiclePage{}, err
+		}
+	}
+	if params.LicensePlate != "" {
+		if params.LicensePlate, err = normalizePlate(params.LicensePlate); err != nil {
+			return ports.VehiclePage{}, err
+		}
+	}
+	if params.Status != "" && !params.Status.Valid() {
+		return ports.VehiclePage{}, fmt.Errorf("%w: unknown status %q", ports.ErrInvalidInput, params.Status)
+	}
+
+	page, err := v.repository.List(ctx, params)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to list vehicles", "cursor", params.Cursor, "limit", params.Limit, "error", err)
+		return ports.VehiclePage{}, err
+	}
+	return page, nil
+}
+
 // TransferVehicle implements [ports.VehicleService].
 func (v *VehicleService) TransferVehicle(ctx context.Context, transferVehicle entity.TransferVehicle) error {
 	// call customer service to validate customer id
