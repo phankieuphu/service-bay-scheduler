@@ -5,6 +5,10 @@ metadata:
   namespace: service-bay
 spec:
   replicas: 1
+  # Single replica: stop the old pod before starting the new one. A rolling
+  # update's surge pod doesn't fit on a memory-tight node and stays Pending.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: kafka

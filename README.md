@@ -159,10 +159,18 @@ kubectl describe pod -n service-bay <pod>
 
 | What | Tool | Where it comes from |
 |------|------|---------------------|
-| Metrics | Prometheus → Grafana | Prometheus scrapes `/metrics` ([prometheus/prometheus.yml](prometheus/prometheus.yml)) |
+| Metrics | Prometheus → Grafana | Services and Flink expose `/metrics`; Postgres and Kafka go through exporters (`postgres-exporter` sidecar on :9187, `kafka-exporter` on :9308). Compose uses static targets ([prometheus/prometheus.yml](prometheus/prometheus.yml)); k8s discovers every pod annotated `prometheus.io/scrape: "true"` + `prometheus.io/port` ([k8s/base/prometheus/configmap.yaml](k8s/base/prometheus/configmap.yaml)), so each replica is scraped on its own |
 | Logs | Loki → Grafana | [Grafana Alloy](https://grafana.com/docs/alloy/) collects the stdout/stderr of every container or pod and pushes it to Loki |
 
-Grafana is at http://localhost:3000 (`admin` / `admin`). With Docker Compose it's there directly. On k8s, port-forward first (see step 5 above). The Prometheus and Loki datasources are provisioned automatically.
+Grafana is at http://localhost:3000 (`admin` / `admin`). With Docker Compose it's there directly. On k8s, port-forward first (see step 5 above). The Prometheus and Loki datasources are provisioned automatically, and so are these dashboards from [k8s/base/grafana/dashboards/](k8s/base/grafana/dashboards) (the single source for both setups; compose mounts the directory, k8s ships it as the `grafana-dashboards` ConfigMap):
+
+| Dashboard | Watch during a load test |
+|-----------|--------------------------|
+| **Go Goroutines** | goroutine leaks, scheduler pressure, CPU per pod ([grafana/docs.md](grafana/docs.md)) |
+| **PostgreSQL** | connections vs `max_connections` (pool budget), transactions/s, row locks, cache hit ratio, deadlocks |
+| **Kafka** | messages in/s per topic, consumer-group lag (appears once a group has committed offsets) |
+
+To add a dashboard, drop its JSON into that directory without a hard-coded datasource `uid` (panels then use the default Prometheus datasource), list it under `configMapGenerator` in [k8s/base/kustomization.yaml](k8s/base/kustomization.yaml), and re-apply.
 
 ### Viewing logs
 

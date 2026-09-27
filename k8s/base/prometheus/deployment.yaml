@@ -16,6 +16,10 @@ metadata:
   namespace: service-bay
 spec:
   replicas: 1
+  # RWO data volume: the old pod must release it before the new one starts
+  # (and a surge pod may not fit on a small node anyway).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: prometheus
@@ -24,6 +28,7 @@ spec:
       labels:
         app: prometheus
     spec:
+      serviceAccountName: prometheus # pod discovery, see rbac.yaml
       containers:
         - name: prometheus
           image: prom/prometheus:v2.53.0

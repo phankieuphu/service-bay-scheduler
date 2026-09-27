@@ -40,4 +40,4 @@ data:
         type: file
         updateIntervalSeconds: 30
         options:
-          path: /etc/grafana/provisioning/dashboards
+          path: /etc/grafana/dashboards # grafana-dashboards ConfigMap (kustomization.yaml)

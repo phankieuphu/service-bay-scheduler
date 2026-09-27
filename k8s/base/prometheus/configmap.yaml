@@ -14,21 +14,42 @@ data:
         static_configs:
           - targets: ["localhost:9090"]
 
-      - job_name: customer-service
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["customer-service:8080"]
-
-      - job_name: vehicle-service
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["vehicle-service:8081"]
-
-      - job_name: identity-service
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["identity-service:8083"]
-    
-      - job_name: flink
-        static_configs:
-          - targets: ["flink-jobmanager:9249", "flink-taskmanager:9249"]
+      # Every pod in the namespace annotated with
+      #   prometheus.io/scrape: "true"
+      #   prometheus.io/port:   "<port>"
+      #   prometheus.io/path:   "/metrics"   (optional, default /metrics)
+      # is scraped directly (not through its Service), so each replica is its
+      # own series and HPA-added pods are picked up automatically. Labels:
+      #   job                  <- the pod's `app` label (customer-service, postgres, ...)
+      #   kubernetes_namespace <- namespace
+      #   kubernetes_pod_name  <- pod name
+      # (the Go Goroutines dashboard filters on the last two).
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [service-bay]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_phase]
+            action: keep
+            regex: Running
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            regex: (.+)
+            target_label: __metrics_path__
+          # Pods declaring several containerPorts yield one target per port;
+          # after this rewrite they are identical and Prometheus dedups them.
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: job
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: kubernetes_pod_name

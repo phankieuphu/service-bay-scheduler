@@ -1,0 +1,52 @@
+# kafka-exporter: topic offsets, partition counts and consumer-group lag on
+# :9308, read over the regular Kafka protocol (no JMX needed on the broker).
+# Consumer lag is what shows whether the services' consumers and the outbox
+# relay's downstream readers keep up under load.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-exporter
+  namespace: service-bay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-exporter
+  template:
+    metadata:
+      labels:
+        app: kafka-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9308"
+    spec:
+      containers:
+        - name: kafka-exporter
+          image: danielqsj/kafka-exporter:v1.8.0
+          args:
+            - --kafka.server=kafka:9092
+            # Report lag even for groups with no active members (e.g. a
+            # consumer that crashed), which is exactly when lag matters.
+            - --offset.show-all
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+          ports:
+            - containerPort: 9308
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-exporter
+  namespace: service-bay
+spec:
+  selector:
+    app: kafka-exporter
+  ports:
+    - name: metrics
+      port: 9308
+      targetPort: 9308

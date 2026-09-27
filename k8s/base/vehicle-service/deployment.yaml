@@ -35,6 +35,9 @@ spec:
     metadata:
       labels:
         app: vehicle-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
     spec:
       containers:
         - name: vehicle-service

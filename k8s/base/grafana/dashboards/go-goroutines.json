@@ -34,10 +34,6 @@
       "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Sum of goroutines across the selected pods.",
       "id": 2,
       "title": "Total Goroutines",
@@ -80,17 +76,15 @@
         "justifyMode": "auto",
         "textMode": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "sum(go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"})",
           "legendFormat": "",
           "refId": "A",
@@ -100,10 +94,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Highest goroutine count in a single pod.",
       "id": 3,
       "title": "Max Goroutines (one pod)",
@@ -146,17 +136,15 @@
         "justifyMode": "auto",
         "textMode": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "max(go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"})",
           "legendFormat": "",
           "refId": "A",
@@ -166,10 +154,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Sum of OS threads created by the Go runtime.",
       "id": 4,
       "title": "OS Threads",
@@ -212,17 +196,15 @@
         "justifyMode": "auto",
         "textMode": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "sum(go_threads{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"})",
           "legendFormat": "",
           "refId": "A",
@@ -232,10 +214,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "How many goroutines were added or removed in the last hour. A large positive value that keeps growing may mean a leak.",
       "id": 5,
       "title": "Goroutine Change (1h)",
@@ -278,17 +256,15 @@
         "justifyMode": "auto",
         "textMode": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         }
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "sum(delta(go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}[1h]))",
           "legendFormat": "",
           "refId": "A",
@@ -311,10 +287,6 @@
       "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Number of goroutines that currently exist in each pod (go_goroutines).",
       "id": 7,
       "title": "Goroutines per Pod",
@@ -361,7 +333,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -373,10 +349,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "{{kubernetes_pod_name}}",
           "refId": "A",
@@ -386,10 +358,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Per-second trend of the goroutine count over 15m (deriv). If this stays above 0 for a long time, goroutines are not exiting.",
       "id": 8,
       "title": "Goroutine Growth Rate (leak detector)",
@@ -440,7 +408,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -452,10 +424,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "deriv(go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}[15m])",
           "legendFormat": "{{kubernetes_pod_name}}",
           "refId": "A",
@@ -465,10 +433,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Current goroutines compared with the same pod 1 hour ago. A line that keeps going up while traffic is flat is a warning sign.",
       "id": 9,
       "title": "Goroutines vs Baseline (1h ago)",
@@ -515,7 +479,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -527,10 +495,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "now {{kubernetes_pod_name}}",
           "refId": "A",
@@ -538,10 +502,6 @@
           "instant": false
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"} offset 1h",
           "legendFormat": "1h ago {{kubernetes_pod_name}}",
           "refId": "B",
@@ -551,10 +511,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "The five pods with the most goroutines in the selected namespace.",
       "id": 10,
       "title": "Top 5 Pods by Goroutines",
@@ -601,7 +557,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -613,10 +573,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "topk(5, go_goroutines{kubernetes_namespace=\"$namespace\"})",
           "legendFormat": "{{kubernetes_pod_name}}",
           "refId": "A",
@@ -639,10 +595,6 @@
       "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "go_threads is the number of OS threads. GOMAXPROCS is how many threads can run Go code at the same time. Many more threads than GOMAXPROCS usually means blocking syscalls or cgo calls.",
       "id": 12,
       "title": "OS Threads vs GOMAXPROCS",
@@ -689,7 +641,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -701,10 +657,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_threads{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "threads {{kubernetes_pod_name}}",
           "refId": "A",
@@ -712,10 +664,6 @@
           "instant": false
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_sched_gomaxprocs_threads{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "GOMAXPROCS {{kubernetes_pod_name}}",
           "refId": "B",
@@ -725,10 +673,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Goroutines divided by OS threads and by GOMAXPROCS. Useful to see how much work each thread or CPU has.",
       "id": 13,
       "title": "Goroutines per Thread / per CPU",
@@ -775,7 +719,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -787,10 +735,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"} / go_threads{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "per thread {{kubernetes_pod_name}}",
           "refId": "A",
@@ -798,10 +742,6 @@
           "instant": false
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"} / go_sched_gomaxprocs_threads{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "per GOMAXPROCS {{kubernetes_pod_name}}",
           "refId": "B",
@@ -811,10 +751,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "How long a goroutine waits in the run queue before it runs. High values mean CPU is saturated or GOMAXPROCS is too low. Needs client_golang with runtime/metrics /sched/latencies enabled.",
       "id": 14,
       "title": "Scheduler Latency (runnable \u2192 running)",
@@ -861,7 +797,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -873,10 +813,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "histogram_quantile(0.50, sum by (le, kubernetes_pod_name) (rate(go_sched_latencies_seconds_bucket{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}[$__rate_interval])))",
           "legendFormat": "p50 {{kubernetes_pod_name}}",
           "refId": "A",
@@ -884,10 +820,6 @@
           "instant": false
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "histogram_quantile(0.90, sum by (le, kubernetes_pod_name) (rate(go_sched_latencies_seconds_bucket{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}[$__rate_interval])))",
           "legendFormat": "p90 {{kubernetes_pod_name}}",
           "refId": "B",
@@ -895,10 +827,6 @@
           "instant": false
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "histogram_quantile(0.99, sum by (le, kubernetes_pod_name) (rate(go_sched_latencies_seconds_bucket{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}[$__rate_interval])))",
           "legendFormat": "p99 {{kubernetes_pod_name}}",
           "refId": "C",
@@ -908,10 +836,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "CPU seconds used per second. Compare with goroutines and scheduler latency to see if goroutine load is CPU bound.",
       "id": 15,
       "title": "CPU Usage",
@@ -958,7 +882,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -970,10 +898,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "rate(process_cpu_seconds_total{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}[$__rate_interval])",
           "legendFormat": "{{kubernetes_pod_name}}",
           "refId": "A",
@@ -996,10 +920,6 @@
       "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Memory used by goroutine stacks. Each goroutine starts with a small stack (about 2-8 KB) that can grow.",
       "id": 17,
       "title": "Stack Memory",
@@ -1046,7 +966,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1058,10 +982,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_memstats_stack_inuse_bytes{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "inuse {{kubernetes_pod_name}}",
           "refId": "A",
@@ -1069,10 +989,6 @@
           "instant": false
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_memstats_stack_sys_bytes{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "sys {{kubernetes_pod_name}}",
           "refId": "B",
@@ -1082,10 +998,6 @@
       ]
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
       "description": "Stack in-use bytes divided by goroutine count. A growing value means goroutines use deep call stacks or large local data.",
       "id": 18,
       "title": "Average Stack Size per Goroutine",
@@ -1132,7 +1044,11 @@
       },
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1144,10 +1060,6 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
           "expr": "go_memstats_stack_inuse_bytes{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"} / go_goroutines{kubernetes_namespace=\"$namespace\", kubernetes_pod_name=~\"$pod\"}",
           "legendFormat": "{{kubernetes_pod_name}}",
           "refId": "A",
@@ -1159,15 +1071,15 @@
   ],
   "refresh": "10s",
   "schemaVersion": 41,
-  "tags": ["go", "golang", "goroutines"],
+  "tags": [
+    "go",
+    "golang",
+    "goroutines"
+  ],
   "templating": {
     "list": [
       {
         "current": {},
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
         "definition": "label_values(go_goroutines, kubernetes_namespace)",
         "includeAll": false,
         "multi": false,
@@ -1185,10 +1097,6 @@
       },
       {
         "current": {},
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
         "definition": "label_values(go_goroutines{kubernetes_namespace=\"$namespace\"}, kubernetes_pod_name)",
         "includeAll": true,
         "multi": true,

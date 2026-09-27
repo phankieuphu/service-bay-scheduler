@@ -181,6 +181,31 @@ services:
     networks:
       - backend
 
+  # Metrics exporters for the stateful infra (scraped by prometheus/prometheus.yml).
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: postgres
+      DATA_SOURCE_PASS: postgres
+    networks:
+      - backend
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: kafka-exporter
+    # exits if the broker isn't up yet
+    restart: on-failure
+    depends_on:
+      - kafka
+    command: ["--kafka.server=kafka:29092", "--offset.show-all"]
+    networks:
+      - backend
+
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: prometheus
@@ -204,6 +229,8 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
+      # same dashboard files k8s ships as the grafana-dashboards ConfigMap
+      - ./k8s/base/grafana/dashboards:/etc/grafana/dashboards:ro
     ports:
       - "3000:3000"
     networks:

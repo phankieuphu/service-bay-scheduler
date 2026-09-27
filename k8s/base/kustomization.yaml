@@ -7,10 +7,12 @@ resources:
   - postgres/statefulset.yaml
   - zookeeper/deployment.yaml
   - kafka/deployment.yaml
+  - kafka/exporter.yaml
   - redis/deployment.yaml
   - flink/configmap.yaml
   - flink/jobmanager.yaml
   - flink/taskmanager.yaml
+  - prometheus/rbac.yaml
   - prometheus/configmap.yaml
   - prometheus/deployment.yaml
   - loki/configmap.yaml
@@ -25,3 +27,17 @@ resources:
   - vehicle-service/hpa.yaml
   - identity-service/secret.yaml
   - identity-service/deployment.yaml
+
+# Grafana dashboards, mounted at /etc/grafana/dashboards. This directory is the
+# single source: docker-compose mounts the same files. No name hash, so an
+# apply updates the mounted files in place and Grafana's file provider picks
+# them up within ~30s + kubelet sync, without restarting the pod.
+configMapGenerator:
+  - name: grafana-dashboards
+    namespace: service-bay
+    files:
+      - grafana/dashboards/go-goroutines.json
+      - grafana/dashboards/postgres.json
+      - grafana/dashboards/kafka.json
+    options:
+      disableNameSuffixHash: true

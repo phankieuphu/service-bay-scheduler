@@ -5,6 +5,10 @@ metadata:
   namespace: service-bay
 spec:
   replicas: 1
+  # Single replica: stop the old pod before starting the new one. A rolling
+  # update's surge pod doesn't fit on a memory-tight node and stays Pending.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: flink
@@ -14,6 +18,9 @@ spec:
       labels:
         app: flink
         component: jobmanager
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9249"
     spec:
       containers:
         - name: jobmanager

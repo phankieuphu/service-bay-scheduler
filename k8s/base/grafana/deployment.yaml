@@ -26,6 +26,9 @@ metadata:
   namespace: service-bay
 spec:
   replicas: 1
+  # RWO data volume: the old pod must release it before the new one starts.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: grafana
@@ -56,6 +59,8 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: dashboards
               mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboard-json
+              mountPath: /etc/grafana/dashboards
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -66,6 +71,9 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-provisioning-dashboards
+        - name: dashboard-json
+          configMap:
+            name: grafana-dashboards
 ---
 apiVersion: v1
 kind: Service
