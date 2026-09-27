@@ -61,3 +61,14 @@ type ListVehiclesResponseDTO struct {
 	NextCursor int64                `json:"next_cursor,omitempty"`
 	HasMore    bool                 `json:"has_more"`
 }
+
+// CustomerVehicleDTO is a vehicle the customer currently owns, plus the
+// day that ownership started.
+type CustomerVehicleDTO struct {
+	VehicleResponseDTO
+	OwnedFrom time.Time `json:"owned_from"`
+}
+
+type CustomerVehiclesResponseDTO struct {
+	Vehicles []CustomerVehicleDTO `json:"vehicles"`
+}

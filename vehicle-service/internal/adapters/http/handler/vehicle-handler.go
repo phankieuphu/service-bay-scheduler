@@ -25,7 +25,7 @@ func NewVehicleHandler(service ports.VehicleService) *VehicleHandler {
 }
 
 func (h *VehicleHandler) RegisterRoutes(r *gin.RouterGroup) {
-	r.GET("/customer-vehicle", h.GetCustomerVehicle)
+	r.GET("/customers/:id/vehicles", h.GetCustomerVehicles)
 	r.POST("/transfer", h.TransferVehicle)
 	r.POST("/vehicle", h.RegisterVehicle)
 	r.GET("/vehicle", h.ListVehicles)
@@ -57,7 +57,28 @@ func (h *VehicleHandler) RegisterVehicle(c *gin.Context) {
 	c.JSON(http.StatusCreated, dto.NewVehicleResponseDTO(vehicle))
 }
 
-func (h *VehicleHandler) GetCustomerVehicle(c *gin.Context) {}
+// GetCustomerVehicles lists the vehicles a customer currently owns.
+func (h *VehicleHandler) GetCustomerVehicles(c *gin.Context) {
+	customerID, ok := pathID(c, "id", "customer")
+	if !ok {
+		return
+	}
+
+	ownerships, err := h.service.GetCustomerVehicles(c.Request.Context(), customerID)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	vehicles := make([]dto.CustomerVehicleDTO, len(ownerships))
+	for i, o := range ownerships {
+		vehicles[i] = dto.CustomerVehicleDTO{
+			VehicleResponseDTO: dto.NewVehicleResponseDTO(o.Vehicle),
+			OwnedFrom:          o.OwnedFrom,
+		}
+	}
+	c.JSON(http.StatusOK, dto.CustomerVehiclesResponseDTO{Vehicles: vehicles})
+}
 
 func (h *VehicleHandler) TransferVehicle(c *gin.Context) {
 	var req dto.TransferVehicleDTO

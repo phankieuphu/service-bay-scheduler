@@ -49,13 +49,13 @@ func (m *MockVehicleRepository) Delete(ctx context.Context, id int64) error {
 }
 
 type MockVehicleCustomerRepository struct {
-	GetCustomerVehicleFunc          func(ctx context.Context, customerID int64) (entity.CustomerVehicle, error)
+	ListCurrentByCustomerFunc       func(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error)
 	AssignVehicleToCustomerFunc     func(ctx context.Context, vehicleID, customerID int64, date time.Time) error
 	UnassignVehicleFromCustomerFunc func(ctx context.Context, vehicleID, customerID int64, date time.Time) error
 }
 
-func (m *MockVehicleCustomerRepository) GetCustomerVehicle(ctx context.Context, customerID int64) (entity.CustomerVehicle, error) {
-	return m.GetCustomerVehicleFunc(ctx, customerID)
+func (m *MockVehicleCustomerRepository) ListCurrentByCustomer(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error) {
+	return m.ListCurrentByCustomerFunc(ctx, customerID)
 }
 
 func (m *MockVehicleCustomerRepository) AssignVehicleToCustomer(ctx context.Context, vehicleID, customerID int64, date time.Time) error {

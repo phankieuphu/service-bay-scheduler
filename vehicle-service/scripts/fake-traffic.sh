@@ -9,11 +9,15 @@ BASE_URL="${1:-http://localhost:8081}/api/v1"
 ROUNDS="${2:-20000}"
 
 for i in $(seq 1 "$ROUNDS"); do
-  # GET /customer-vehicle (stub handler, always 200)
-  curl -s -o /dev/null -w "GET /customer-vehicle -> %{http_code}\n" \
-    "$BASE_URL/customer-vehicle"
+  # GET /customers/:id/vehicles - vary the customer id
+  curl -s -o /dev/null -w "GET /customers/$i/vehicles -> %{http_code}\n" \
+    "$BASE_URL/customers/$i/vehicles"
 
-  # GET /vehicle/:id (stub handler, always 200) - vary the id
+  # GET /vehicle (list, first page)
+  curl -s -o /dev/null -w "GET /vehicle -> %{http_code}\n" \
+    "$BASE_URL/vehicle?limit=20"
+
+  # GET /vehicle/:id - vary the id (404 past the last seeded vehicle)
   curl -s -o /dev/null -w "GET /vehicle/$i -> %{http_code}\n" \
     "$BASE_URL/vehicle/$i"
 

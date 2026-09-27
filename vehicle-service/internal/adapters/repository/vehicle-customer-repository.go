@@ -44,23 +44,24 @@ func (c VehicleCustomerRepository) AssignVehicleToCustomer(ctx context.Context, 
 	return err
 }
 
-// GetCustomerVehicle implements [ports.VehicleCustomerRepository].
-func (c VehicleCustomerRepository) GetCustomerVehicle(ctx context.Context, customerID int64) (entity.CustomerVehicle, error) {
-	var model models.CustomerVehicle
-	err := database_provider.DBFromContext(ctx, c.db).First(&model).Where("customer =? ", customerID).Error
+// ListCurrentByCustomer implements [ports.VehicleCustomerRepository].
+func (c VehicleCustomerRepository) ListCurrentByCustomer(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error) {
+	var rows []models.CustomerVehicle
+	err := database_provider.DBFromContext(ctx, c.db).
+		Preload("Vehicle").
+		Where("customer_id = ? AND status = ?", customerID, constants.OwnershipCurrent).
+		Order("owned_from DESC, id DESC").
+		Find(&rows).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.CustomerVehicle{}, ports.ErrNotFound
-		}
-		return entity.CustomerVehicle{}, err
+		return nil, err
 	}
-	return c.toDomain(model), nil
-}
 
-// TransferVehicleToCustomer implements [ports.VehicleCustomerRepository].
-// func (c VehicleCustomerRepository) TransferVehicleToCustomer(ctx context.Context, customerID int64) error {
-// 	panic("unimplemented")
-// }
+	ownerships := make([]entity.CustomerVehicle, len(rows))
+	for i, row := range rows {
+		ownerships[i] = c.toDomain(row)
+	}
+	return ownerships, nil
+}
 
 // UnassignVehicleFromCustomer implements [ports.VehicleCustomerRepository].
 func (c VehicleCustomerRepository) UnassignVehicleFromCustomer(ctx context.Context, vehicleID int64, customerID int64, date time.Time) error {

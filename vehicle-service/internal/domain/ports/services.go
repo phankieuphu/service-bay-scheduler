@@ -7,7 +7,7 @@ import (
 )
 
 type VehicleService interface {
-	GetCustomerVehicle(ctx context.Context, customerID int) ([]entity.Vehicle, error)
+	GetCustomerVehicles(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error)
 	GetVehicle(ctx context.Context, vehicleID int64) (entity.Vehicle, error)
 	ListVehicles(ctx context.Context, params ListVehiclesParams) (VehiclePage, error)
 	TransferVehicle(ctx context.Context, transferVehicle entity.TransferVehicle) error

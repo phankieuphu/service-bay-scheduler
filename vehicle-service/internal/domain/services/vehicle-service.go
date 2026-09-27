@@ -230,9 +230,16 @@ func isClientError(err error) bool {
 		errors.Is(err, ports.ErrInvalidInput) || errors.Is(err, ports.ErrInvalidState)
 }
 
-// GetCustomerVehicle implements [ports.VehicleService].
-func (v *VehicleService) GetCustomerVehicle(ctx context.Context, customerID int) ([]entity.Vehicle, error) {
-	panic("unimplemented")
+// GetCustomerVehicles implements [ports.VehicleService]. An unknown customer
+// just has no vehicles: customers live in customer-service, which this
+// service doesn't call on the read path.
+func (v *VehicleService) GetCustomerVehicles(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error) {
+	ownerships, err := v.vehicleCustomerRepository.ListCurrentByCustomer(ctx, customerID)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to list customer vehicles", "customer", customerID, "error", err)
+		return nil, err
+	}
+	return ownerships, nil
 }
 
 // GetVehicle implements [ports.VehicleService].
