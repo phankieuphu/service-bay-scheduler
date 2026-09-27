@@ -1,4 +1,5 @@
-import { jsonBody, request } from './http'
+import { jsonBody } from './http'
+import { authorizedRequest } from './session'
 
 export { ApiError } from './http'
 
@@ -25,9 +26,9 @@ export interface TransferVehiclePayload {
 }
 
 export function getVehicle(vehicleId: number): Promise<Vehicle> {
-  return request(`${BASE_URL}/vehicle/${vehicleId}`)
+  return authorizedRequest(`${BASE_URL}/vehicle/${vehicleId}`)
 }
 
 export function transferVehicle(payload: TransferVehiclePayload): Promise<void> {
-  return request(`${BASE_URL}/transfer`, jsonBody('POST', payload))
+  return authorizedRequest(`${BASE_URL}/transfer`, jsonBody('POST', payload))
 }
