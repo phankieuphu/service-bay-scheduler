@@ -1,6 +1,9 @@
 package events
 
-import "time"
+import (
+	"time"
+	"vehicle-service/internal/domain/entity"
+)
 
 // Payloads published through the outbox, one topic per event type (see
 // constants/topics.go). Every event carries an EventID so at-least-once
@@ -49,4 +52,19 @@ type OwnerAssigned struct {
 	VehicleID  int64     `json:"vehicle_id"`
 	CustomerID int64     `json:"customer_id"`
 	OwnedFrom  string    `json:"owned_from"`
+}
+
+// ServiceCompleted is consumed from scheduler-service (config
+// Kafka.ServiceCompletedTopic). scheduler-service doesn't exist yet; this
+// is the contract it's expected to publish — see architecture-design.md
+// §3b.
+type ServiceCompleted struct {
+	EventID       string                    `json:"event_id"`
+	OccurredAt    time.Time                 `json:"occurred_at"`
+	AppointmentID int64                     `json:"appointment_id"`
+	VehicleID     int64                     `json:"vehicle_id"`
+	CustomerID    int64                     `json:"customer_id"`
+	DealershipID  int64                     `json:"dealership_id"`
+	CompletedAt   time.Time                 `json:"completed_at"`
+	Services      []entity.ServicePerformed `json:"services"`
 }

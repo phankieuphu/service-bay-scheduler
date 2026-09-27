@@ -32,6 +32,9 @@ func (h *VehicleHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/vehicle/:id", h.GetVehicle)
 	r.PATCH("/vehicle/:id", h.UpdateVehicle)
 	r.POST("/vehicle/:id/owner", h.AssignInitialOwner)
+	r.GET("/vehicle/:id/warranty", h.GetWarranty)
+	r.GET("/vehicle/:id/history", h.GetServiceHistory)
+	r.GET("/vehicle/:id/materials", h.GetVehicleMaterials)
 }
 
 func (h *VehicleHandler) RegisterVehicle(c *gin.Context) {
@@ -208,6 +211,87 @@ func (h *VehicleHandler) AssignInitialOwner(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// GetWarranty reports warranty status for today, or for `date`
+// (YYYY-MM-DD) — billing asks about the day the service was done.
+func (h *VehicleHandler) GetWarranty(c *gin.Context) {
+	vehicleID, ok := pathID(c, "id", "vehicle")
+	if !ok {
+		return
+	}
+	asOf := time.Now()
+	if date := c.Query("date"); date != "" {
+		parsed, err := time.Parse(time.DateOnly, date)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "date must be YYYY-MM-DD"})
+			return
+		}
+		asOf = parsed
+	}
+
+	warranty, err := h.service.GetWarranty(c.Request.Context(), vehicleID, asOf)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, dto.NewWarrantyResponseDTO(warranty))
+}
+
+// GetServiceHistory lists completed appointments for the vehicle, most
+// recent first; `limit` defaults to 50 (max 200).
+func (h *VehicleHandler) GetServiceHistory(c *gin.Context) {
+	vehicleID, ok := pathID(c, "id", "vehicle")
+	if !ok {
+		return
+	}
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	if err != nil || limit < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+		return
+	}
+
+	entries, err := h.service.GetServiceHistory(c.Request.Context(), vehicleID, limit)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	history := make([]dto.ServiceHistoryEntryDTO, len(entries))
+	for i, e := range entries {
+		history[i] = dto.ServiceHistoryEntryDTO{
+			ID:            e.ID,
+			AppointmentID: e.AppointmentID,
+			DealershipID:  e.DealershipID,
+			CompletedAt:   e.CompletedAt,
+			Services:      e.Services,
+		}
+	}
+	c.JSON(http.StatusOK, dto.ServiceHistoryResponseDTO{History: history})
+}
+
+// GetVehicleMaterials lists parts installed on the vehicle, most recent first.
+func (h *VehicleHandler) GetVehicleMaterials(c *gin.Context) {
+	vehicleID, ok := pathID(c, "id", "vehicle")
+	if !ok {
+		return
+	}
+
+	materials, err := h.service.GetVehicleMaterials(c.Request.Context(), vehicleID)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	items := make([]dto.VehicleMaterialDTO, len(materials))
+	for i, m := range materials {
+		items[i] = dto.VehicleMaterialDTO{
+			ID:          m.ID,
+			MaterialID:  m.MaterialID,
+			Description: m.Description,
+			Count:       m.Count,
+			InstalledAt: m.InstalledAt,
+		}
+	}
+	c.JSON(http.StatusOK, dto.VehicleMaterialsResponseDTO{Materials: items})
 }
 
 // writeError maps the sentinel errors in ports/errors.go to status codes.

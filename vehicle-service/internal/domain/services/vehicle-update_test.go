@@ -47,7 +47,7 @@ func TestVehicleService_UpdateVehicle(t *testing.T) {
 			h.events[m.Topic] = m.Payload
 			return nil
 		}}
-		h.svc = NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{})
+		h.svc = NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 		return h
 	}
 	status := func(s constants.VehicleStatus) *constants.VehicleStatus { return &s }

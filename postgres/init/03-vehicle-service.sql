@@ -76,6 +76,25 @@ CREATE TABLE vehicle_material (
 CREATE INDEX idx_veh_material_vehicle  ON vehicle_material(vehicle_id);
 CREATE INDEX idx_veh_material_material ON vehicle_material(material_id);
 
+-- Service-history read model (architecture-design.md §1, §6): one row per
+-- completed appointment, written only by vehicle-service's consumer of
+-- scheduler-service's ServiceCompleted event. appointment_id is the
+-- idempotency key, so a redelivered event is a no-op. services is a copy
+-- of what was done at the time (Pattern c), not a live reference into
+-- dealership-service's catalog.
+CREATE TABLE vehicle_service_history (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    vehicle_id     BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE RESTRICT,
+    appointment_id BIGINT NOT NULL UNIQUE,  -- owned by scheduler-service, no FK
+    dealership_id  BIGINT NOT NULL,         -- owned by dealership-service, no FK
+    completed_at   timestamptz NOT NULL,
+    services       jsonb NOT NULL DEFAULT '[]',
+    created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_vehicle_service_history_vehicle
+    ON vehicle_service_history(vehicle_id, completed_at DESC);
+
 
 CREATE TABLE outbox_message (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

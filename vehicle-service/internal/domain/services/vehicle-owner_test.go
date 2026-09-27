@@ -39,7 +39,7 @@ func TestVehicleService_AssignInitialOwner(t *testing.T) {
 			outboxRows = append(outboxRows, m)
 			return nil
 		}}
-		return NewVehicleService(config.Config{}, repo, outbox, vcr, &MockTxManager{}, &MockCache{}), &calls, &outboxRows
+		return NewVehicleService(config.Config{}, repo, outbox, vcr, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{}), &calls, &outboxRows
 	}
 
 	t.Run("assigns and emits OwnerAssigned", func(t *testing.T) {

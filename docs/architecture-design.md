@@ -123,6 +123,37 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 
 ---
 
+### 3b. vehicle-service event contracts
+
+**Consumed — `ServiceCompleted`** on `scheduler.appointment.service-completed.v1` (vehicle-service config `KAFKA_SERVICE_COMPLETED_TOPIC`). scheduler-service doesn't exist yet; this is the shape vehicle-service's history read model expects, so scheduler-service should publish exactly this. Key: appointment id.
+
+```json
+{
+  "event_id": "0d6f1c1e-5b8e-4a55-9f0e-6f4f2a1c9b10",
+  "occurred_at": "2026-09-01T14:05:00Z",
+  "appointment_id": 500,
+  "vehicle_id": 1,
+  "customer_id": 42,
+  "dealership_id": 2,
+  "completed_at": "2026-09-01T14:00:00Z",
+  "services": [{ "service_id": 3, "name": "Oil change" }]
+}
+```
+
+- `appointment_id`, `vehicle_id` and `completed_at` are required. vehicle-service keys the history row on `appointment_id`, so a redelivery is a no-op.
+- `services` is copied into the history row as it was at completion time (§5c), so a later catalog rename doesn't rewrite history.
+- A message that can't be decoded, is missing required fields, or names an unknown vehicle is logged and skipped rather than retried.
+
+**Produced** (via the outbox; key = vehicle id; every payload has `event_id` and `occurred_at`; dates are `YYYY-MM-DD`):
+
+| Topic | When | Payload (besides `event_id`, `occurred_at`) |
+|---|---|---|
+| `vehicle.vehicle.created.v1` | `POST /vehicle` | `vehicle_id`, `vin`, `license_plate`, `vehicle_model_id`, `warranty_end_date`, `status` |
+| `vehicle.vehicle.updated.v1` | `PATCH /vehicle/:id` changed something | `vehicle_id`, `status`, `warranty_end_date`, `updated_at` (state after the change) |
+| `vehicle.vehicle.warranty-changed.v1` | `PATCH` changed the warranty — **billing-service's input** | `vehicle_id`, `previous_warranty_end_date`, `warranty_end_date` |
+| `vehicle.vehicle-customer.assigned.v1` | `POST /vehicle/:id/owner` | `vehicle_id`, `customer_id`, `owned_from` |
+| `vehicle.vehicle-customer.transfer.v1` | `POST /transfer` | (pre-existing; untagged Go field names: `Date`, `From`, `To`, `VehicleID`) |
+
 ## 4. Booking correctness across service boundaries
 
 Splitting the domain doesn't have to weaken the double-booking guarantee, because the fields that matter for that guarantee — bay id, technician id, vehicle id, time range — all live on the Appointment row itself, inside scheduler-service's own database. A uniqueness/overlap constraint scoped to that one table, in that one database, still prevents two bookings from claiming the same bay, technician, or vehicle at the same time, with no cross-service coordination needed for that part.

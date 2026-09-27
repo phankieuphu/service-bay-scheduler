@@ -84,6 +84,27 @@ func (m *MockOutboxRepository) MarkPublished(ctx context.Context, ids []int64) e
 	return m.MarkPublishedFunc(ctx, ids)
 }
 
+type MockVehicleMaterialRepository struct {
+	ListByVehicleFunc func(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error)
+}
+
+func (m *MockVehicleMaterialRepository) ListByVehicle(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error) {
+	return m.ListByVehicleFunc(ctx, vehicleID)
+}
+
+type MockServiceHistoryRepository struct {
+	RecordFunc        func(ctx context.Context, entry entity.ServiceHistoryEntry) (bool, error)
+	ListByVehicleFunc func(ctx context.Context, vehicleID int64, limit int) ([]entity.ServiceHistoryEntry, error)
+}
+
+func (m *MockServiceHistoryRepository) Record(ctx context.Context, entry entity.ServiceHistoryEntry) (bool, error) {
+	return m.RecordFunc(ctx, entry)
+}
+
+func (m *MockServiceHistoryRepository) ListByVehicle(ctx context.Context, vehicleID int64, limit int) ([]entity.ServiceHistoryEntry, error) {
+	return m.ListByVehicleFunc(ctx, vehicleID, limit)
+}
+
 type MockTxManager struct {
 	RunInTxFunc func(ctx context.Context, fn func(ctx context.Context) error) error
 }
@@ -144,7 +165,7 @@ func TestVehicleService_GetVehicle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &MockVehicleRepository{GetByIDFunc: tt.getByIDFunc}
-			vehicleService := NewVehicleService(config.Config{}, repo, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{})
+			vehicleService := NewVehicleService(config.Config{}, repo, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 
 			result, err := vehicleService.GetVehicle(context.Background(), tt.vehicleID)
 
@@ -337,7 +358,7 @@ func TestVehicleService_Transfer(t *testing.T) {
 				RunInTxFunc: tt.runInTxFunc,
 			}
 
-			vehicleService := NewVehicleService(config.Config{}, &MockVehicleRepository{}, outboxRepo, vehicleCustomerRepo, txManager, &MockCache{})
+			vehicleService := NewVehicleService(config.Config{}, &MockVehicleRepository{}, outboxRepo, vehicleCustomerRepo, txManager, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 
 			err := vehicleService.TransferVehicle(context.Background(), tt.transferVehicle)
 			if !errors.Is(err, tt.wantErr) {

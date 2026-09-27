@@ -21,14 +21,92 @@ type VehicleService struct {
 	config                    config.Config
 	repository                ports.VehicleRepository
 	vehicleCustomerRepository ports.VehicleCustomerRepository
+	materials                 ports.VehicleMaterialRepository
+	history                   ports.ServiceHistoryRepository
 	outbox                    ports.OutboxRepository
 	txManager                 ports.TxManager
 	cache                     ports.Cache
 }
 
-// GetVehicleMaterials implements [ports.VehicleService].
-func (v *VehicleService) GetVehicleMaterials(ctx context.Context, vehicleID int64) (entity.VehicleMaterial, error) {
-	panic("unimplemented")
+const (
+	defaultHistoryLimit = 50
+	maxHistoryLimit     = 200
+)
+
+// GetVehicleMaterials implements [ports.VehicleService]. An unknown vehicle
+// is a 404 rather than an empty list, so a typo in the id isn't mistaken
+// for "nothing installed".
+func (v *VehicleService) GetVehicleMaterials(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error) {
+	if _, err := v.repository.GetByID(ctx, vehicleID); err != nil {
+		return nil, err
+	}
+	materials, err := v.materials.ListByVehicle(ctx, vehicleID)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to list vehicle materials", "vehicle", vehicleID, "error", err)
+		return nil, err
+	}
+	return materials, nil
+}
+
+// GetWarranty implements [ports.VehicleService].
+func (v *VehicleService) GetWarranty(ctx context.Context, vehicleID int64, asOf time.Time) (entity.Warranty, error) {
+	vehicle, err := v.repository.GetByID(ctx, vehicleID)
+	if err != nil {
+		return entity.Warranty{}, err
+	}
+
+	day := calendarDate(asOf)
+	warranty := entity.Warranty{VehicleID: vehicleID, EndDate: vehicle.WarrantyEndDate, AsOf: day}
+	if end := vehicle.WarrantyEndDate; end != nil && !end.Before(day) {
+		warranty.Active = true
+		warranty.DaysRemaining = int(end.Sub(day).Hours() / 24)
+	}
+	return warranty, nil
+}
+
+// GetServiceHistory implements [ports.VehicleService].
+func (v *VehicleService) GetServiceHistory(ctx context.Context, vehicleID int64, limit int) ([]entity.ServiceHistoryEntry, error) {
+	switch {
+	case limit <= 0:
+		limit = defaultHistoryLimit
+	case limit > maxHistoryLimit:
+		limit = maxHistoryLimit
+	}
+	if _, err := v.repository.GetByID(ctx, vehicleID); err != nil {
+		return nil, err
+	}
+	entries, err := v.history.ListByVehicle(ctx, vehicleID, limit)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to list service history", "vehicle", vehicleID, "error", err)
+		return nil, err
+	}
+	return entries, nil
+}
+
+// RecordServiceCompleted implements [ports.VehicleService].
+func (v *VehicleService) RecordServiceCompleted(ctx context.Context, event events.ServiceCompleted) error {
+	if event.AppointmentID <= 0 || event.VehicleID <= 0 || event.CompletedAt.IsZero() {
+		return fmt.Errorf("%w: ServiceCompleted needs appointment_id, vehicle_id and completed_at", ports.ErrInvalidInput)
+	}
+	services := event.Services
+	if services == nil {
+		services = []entity.ServicePerformed{}
+	}
+
+	created, err := v.history.Record(ctx, entity.ServiceHistoryEntry{
+		VehicleID:     event.VehicleID,
+		AppointmentID: event.AppointmentID,
+		DealershipID:  event.DealershipID,
+		CompletedAt:   event.CompletedAt,
+		Services:      services,
+	})
+	if err != nil {
+		return err
+	}
+	if !created {
+		logger.InfoContext(ctx, "service history: duplicate ServiceCompleted ignored", "appointment", event.AppointmentID, "event", event.EventID)
+	}
+	return nil
 }
 
 // AssignInitialOwner implements [ports.VehicleService]. The vehicle row is
@@ -322,7 +400,7 @@ func (v *VehicleService) TransferVehicle(ctx context.Context, transferVehicle en
 	return err
 }
 
-func NewVehicleService(cfg config.Config, repository ports.VehicleRepository, outbox ports.OutboxRepository, vehicleCustomerRepository ports.VehicleCustomerRepository, txManager ports.TxManager, cache ports.Cache) ports.VehicleService {
+func NewVehicleService(cfg config.Config, repository ports.VehicleRepository, outbox ports.OutboxRepository, vehicleCustomerRepository ports.VehicleCustomerRepository, txManager ports.TxManager, cache ports.Cache, materials ports.VehicleMaterialRepository, history ports.ServiceHistoryRepository) ports.VehicleService {
 	return &VehicleService{
 		repository:                repository,
 		config:                    cfg,
@@ -330,5 +408,7 @@ func NewVehicleService(cfg config.Config, repository ports.VehicleRepository, ou
 		txManager:                 txManager,
 		cache:                     cache,
 		vehicleCustomerRepository: vehicleCustomerRepository,
+		materials:                 materials,
+		history:                   history,
 	}
 }

@@ -72,3 +72,45 @@ type CustomerVehicleDTO struct {
 type CustomerVehiclesResponseDTO struct {
 	Vehicles []CustomerVehicleDTO `json:"vehicles"`
 }
+
+type WarrantyResponseDTO struct {
+	VehicleID       int64      `json:"vehicle_id"`
+	WarrantyEndDate *time.Time `json:"warranty_end_date"` // null: no warranty on record
+	AsOf            string     `json:"as_of"`             // YYYY-MM-DD the status is for
+	InWarranty      bool       `json:"in_warranty"`
+	DaysRemaining   int        `json:"days_remaining"`
+}
+
+func NewWarrantyResponseDTO(w entity.Warranty) WarrantyResponseDTO {
+	return WarrantyResponseDTO{
+		VehicleID:       w.VehicleID,
+		WarrantyEndDate: w.EndDate,
+		AsOf:            w.AsOf.Format(time.DateOnly),
+		InWarranty:      w.Active,
+		DaysRemaining:   w.DaysRemaining,
+	}
+}
+
+type VehicleMaterialDTO struct {
+	ID          int64     `json:"id"`
+	MaterialID  int64     `json:"material_id"`
+	Description string    `json:"description,omitempty"`
+	Count       int       `json:"count"`
+	InstalledAt time.Time `json:"installed_at"`
+}
+
+type VehicleMaterialsResponseDTO struct {
+	Materials []VehicleMaterialDTO `json:"materials"`
+}
+
+type ServiceHistoryEntryDTO struct {
+	ID            int64                     `json:"id"`
+	AppointmentID int64                     `json:"appointment_id"`
+	DealershipID  int64                     `json:"dealership_id"`
+	CompletedAt   time.Time                 `json:"completed_at"`
+	Services      []entity.ServicePerformed `json:"services"`
+}
+
+type ServiceHistoryResponseDTO struct {
+	History []ServiceHistoryEntryDTO `json:"history"`
+}

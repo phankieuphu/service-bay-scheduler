@@ -26,5 +26,16 @@ type VehicleCustomerRepository interface {
 }
 
 type VehicleMaterialRepository interface {
-	GetVehicleMaterials(ctx context.Context, vehicle_id int) ([]entity.VehicleMaterial, error)
+	// ListByVehicle returns the materials installed on a vehicle, most
+	// recently installed first.
+	ListByVehicle(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error)
+}
+
+type ServiceHistoryRepository interface {
+	// Record stores entry unless one already exists for its AppointmentID,
+	// reporting whether it was new. Returns ErrNotFound if the vehicle
+	// doesn't exist.
+	Record(ctx context.Context, entry entity.ServiceHistoryEntry) (created bool, err error)
+	// ListByVehicle returns up to limit entries, most recent first.
+	ListByVehicle(ctx context.Context, vehicleID int64, limit int) ([]entity.ServiceHistoryEntry, error)
 }

@@ -41,7 +41,7 @@ func TestVehicleService_RegisterVehicle(t *testing.T) {
 			defer func() { inTx = false }()
 			return fn(ctx)
 		}}
-		svc := NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, tx, &MockCache{})
+		svc := NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, tx, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 
 		// Local midnight in UTC+7 is still July 11 — not July 10 in UTC.
 		warranty := time.Date(2030, 7, 11, 0, 0, 0, 0, time.FixedZone("UTC+7", 7*3600))
@@ -97,7 +97,7 @@ func TestVehicleService_RegisterVehicle(t *testing.T) {
 				t.Error("repository called for invalid input")
 				return entity.Vehicle{}, nil
 			}}
-			svc := NewVehicleService(config.Config{}, repo, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{})
+			svc := NewVehicleService(config.Config{}, repo, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 			if _, err := svc.RegisterVehicle(context.Background(), tt.vehicle); !errors.Is(err, ports.ErrInvalidInput) {
 				t.Errorf("err = %v, want ErrInvalidInput", err)
 			}
@@ -108,7 +108,7 @@ func TestVehicleService_RegisterVehicle(t *testing.T) {
 		var stored entity.Vehicle
 		repo := &MockVehicleRepository{CreateFunc: func(_ context.Context, v entity.Vehicle) (entity.Vehicle, error) { stored = v; return v, nil }}
 		outbox := &MockOutboxRepository{CreateFunc: func(context.Context, entity.OutboxMessage) error { return nil }}
-		svc := NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{})
+		svc := NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 		if _, err := svc.RegisterVehicle(context.Background(), entity.Vehicle{Vin: validVin, VehicleModelID: 1}); err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +125,7 @@ func TestVehicleService_RegisterVehicle(t *testing.T) {
 			t.Error("event written for a failed insert")
 			return nil
 		}}
-		svc := NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{})
+		svc := NewVehicleService(config.Config{}, repo, outbox, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 		if _, err := svc.RegisterVehicle(context.Background(), entity.Vehicle{Vin: validVin, VehicleModelID: 1}); !errors.Is(err, ports.ErrConflict) {
 			t.Errorf("err = %v, want ErrConflict", err)
 		}

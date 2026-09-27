@@ -11,7 +11,7 @@ import (
 
 func TestVehicleService_ListVehicles(t *testing.T) {
 	newSvc := func(list func(context.Context, ports.ListVehiclesParams) (ports.VehiclePage, error)) ports.VehicleService {
-		return NewVehicleService(config.Config{}, &MockVehicleRepository{ListFunc: list}, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{})
+		return NewVehicleService(config.Config{}, &MockVehicleRepository{ListFunc: list}, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 	}
 
 	limits := []struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 	"vehicle-service/internal/domain/entity"
+	"vehicle-service/internal/domain/events"
 )
 
 type VehicleService interface {
@@ -16,7 +17,12 @@ type VehicleService interface {
 	// AssignInitialOwner gives a vehicle with no current owner its first
 	// one; after that, ownership changes go through TransferVehicle.
 	AssignInitialOwner(ctx context.Context, vehicleID, customerID int64, date time.Time) error
-	// GetWarranty(ctx context.Context, vehicleID int64)
-	// VehicleHistory(ctx context.Context, vehicleID int64) // vehicle history
-	GetVehicleMaterials(ctx context.Context, vehicleID int64) (entity.VehicleMaterial, error)
+	GetVehicleMaterials(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error)
+	// GetWarranty evaluates the warranty on asOf's calendar day, so billing
+	// can ask about the day the service was done, not just today.
+	GetWarranty(ctx context.Context, vehicleID int64, asOf time.Time) (entity.Warranty, error)
+	GetServiceHistory(ctx context.Context, vehicleID int64, limit int) ([]entity.ServiceHistoryEntry, error)
+	// RecordServiceCompleted adds a completed appointment to the vehicle's
+	// history. Redelivering the same appointment is a no-op.
+	RecordServiceCompleted(ctx context.Context, event events.ServiceCompleted) error
 }
