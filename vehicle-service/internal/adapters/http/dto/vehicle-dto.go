@@ -18,6 +18,16 @@ type RegisterVehicleDTO struct {
 	Status          constants.VehicleStatus `json:"status"` // defaults to ACTIVE
 }
 
+// UpdateVehicleDTO is the body of PATCH /vehicle/:id. Omitted fields are
+// left unchanged. UpdatedAt must be the updated_at the client last read
+// (from GET /vehicle/:id); the update is rejected with 409 if the vehicle
+// has changed since.
+type UpdateVehicleDTO struct {
+	Status          *constants.VehicleStatus `json:"status"`
+	WarrantyEndDate *time.Time               `json:"warranty_end_date"`
+	UpdatedAt       time.Time                `json:"updated_at" binding:"required"`
+}
+
 type VehicleResponseDTO struct {
 	ID             int64  `json:"id"`
 	Vin            string `json:"vin"`

@@ -2,7 +2,6 @@ package ports
 
 import (
 	"context"
-	"vehicle-service/internal/constants"
 	"vehicle-service/internal/domain/entity"
 )
 
@@ -12,7 +11,7 @@ type VehicleService interface {
 	ListVehicles(ctx context.Context, params ListVehiclesParams) (VehiclePage, error)
 	TransferVehicle(ctx context.Context, transferVehicle entity.TransferVehicle) error
 	RegisterVehicle(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error) // register new vehicle
-	UpdateVehicleStatus(ctx context.Context, vehicleID int64, status constants.VehicleStatus) error
+	UpdateVehicle(ctx context.Context, vehicleID int64, update entity.VehicleUpdate) (entity.Vehicle, error)
 	InitialVehicleOwner(ctx context.Context, vehicleID int64, owner int64) error // assign just work with vehicle was has owner
 	// GetWarranty(ctx context.Context, vehicleID int64)
 	// VehicleHistory(ctx context.Context, vehicleID int64) // vehicle history

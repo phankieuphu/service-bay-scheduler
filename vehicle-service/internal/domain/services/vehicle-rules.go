@@ -58,3 +58,10 @@ func formatDate(t *time.Time) *string {
 	s := t.Format(time.DateOnly)
 	return &s
 }
+
+func sameDate(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(*b)
+}

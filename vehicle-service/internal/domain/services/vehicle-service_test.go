@@ -14,9 +14,11 @@ import (
 type MockVehicleRepository struct {
 	CreateFunc  func(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error)
 	GetByIDFunc func(ctx context.Context, id int64) (entity.Vehicle, error)
-	ListFunc    func(ctx context.Context, params ports.ListVehiclesParams) (ports.VehiclePage, error)
-	UpdateFunc  func(ctx context.Context, vehicle entity.Vehicle) error
-	DeleteFunc  func(ctx context.Context, id int64) error
+	// GetByIDForUpdateFunc defaults to GetByIDFunc when unset.
+	GetByIDForUpdateFunc func(ctx context.Context, id int64) (entity.Vehicle, error)
+	ListFunc             func(ctx context.Context, params ports.ListVehiclesParams) (ports.VehiclePage, error)
+	UpdateFunc           func(ctx context.Context, vehicle entity.Vehicle) error
+	DeleteFunc           func(ctx context.Context, id int64) error
 }
 
 func (m *MockVehicleRepository) Create(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error) {
@@ -24,6 +26,13 @@ func (m *MockVehicleRepository) Create(ctx context.Context, vehicle entity.Vehic
 }
 
 func (m *MockVehicleRepository) GetByID(ctx context.Context, id int64) (entity.Vehicle, error) {
+	return m.GetByIDFunc(ctx, id)
+}
+
+func (m *MockVehicleRepository) GetByIDForUpdate(ctx context.Context, id int64) (entity.Vehicle, error) {
+	if m.GetByIDForUpdateFunc != nil {
+		return m.GetByIDForUpdateFunc(ctx, id)
+	}
 	return m.GetByIDFunc(ctx, id)
 }
 

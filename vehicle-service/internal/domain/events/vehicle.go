@@ -18,3 +18,24 @@ type VehicleCreated struct {
 	WarrantyEndDate *string   `json:"warranty_end_date"`
 	Status          string    `json:"status"`
 }
+
+// VehicleUpdated is published on constants.VehicleUpdate with the
+// vehicle's state after the change.
+type VehicleUpdated struct {
+	EventID         string    `json:"event_id"`
+	OccurredAt      time.Time `json:"occurred_at"`
+	VehicleID       int64     `json:"vehicle_id"`
+	Status          string    `json:"status"`
+	WarrantyEndDate *string   `json:"warranty_end_date"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// WarrantyChanged is published on constants.WarrantyChanged, in addition to
+// VehicleUpdated, when warranty_end_date changes.
+type WarrantyChanged struct {
+	EventID                 string    `json:"event_id"`
+	OccurredAt              time.Time `json:"occurred_at"`
+	VehicleID               int64     `json:"vehicle_id"`
+	PreviousWarrantyEndDate *string   `json:"previous_warranty_end_date"`
+	WarrantyEndDate         *string   `json:"warranty_end_date"`
+}

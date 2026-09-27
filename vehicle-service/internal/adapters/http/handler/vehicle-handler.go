@@ -30,6 +30,7 @@ func (h *VehicleHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/vehicle", h.RegisterVehicle)
 	r.GET("/vehicle", h.ListVehicles)
 	r.GET("/vehicle/:id", h.GetVehicle)
+	r.PATCH("/vehicle/:id", h.UpdateVehicle)
 }
 
 func (h *VehicleHandler) RegisterVehicle(c *gin.Context) {
@@ -128,6 +129,32 @@ func (h *VehicleHandler) GetVehicle(c *gin.Context) {
 	}
 
 	vehicle, err := h.service.GetVehicle(c.Request.Context(), vehicleID)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.NewVehicleResponseDTO(vehicle))
+}
+
+// UpdateVehicle returns the vehicle after the update, including its new
+// updated_at for the client's next PATCH.
+func (h *VehicleHandler) UpdateVehicle(c *gin.Context) {
+	vehicleID, ok := pathID(c, "id", "vehicle")
+	if !ok {
+		return
+	}
+	var req dto.UpdateVehicleDTO
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	vehicle, err := h.service.UpdateVehicle(c.Request.Context(), vehicleID, entity.VehicleUpdate{
+		Status:          req.Status,
+		WarrantyEndDate: req.WarrantyEndDate,
+		UpdatedAt:       req.UpdatedAt,
+	})
 	if err != nil {
 		writeError(c, err)
 		return

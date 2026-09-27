@@ -87,7 +87,7 @@ func (v *VehicleService) RegisterVehicle(ctx context.Context, vehicle entity.Veh
 		})
 	})
 	if err != nil {
-		if !errors.Is(err, ports.ErrConflict) && !errors.Is(err, ports.ErrInvalidInput) {
+		if !isClientError(err) {
 			logger.ErrorContext(ctx, "failed to register vehicle", "vin", vin, "error", err)
 		}
 		return entity.Vehicle{}, err
@@ -95,9 +95,102 @@ func (v *VehicleService) RegisterVehicle(ctx context.Context, vehicle entity.Veh
 	return created, nil
 }
 
-// UpdateVehicleStatus implements [ports.VehicleService].
-func (v *VehicleService) UpdateVehicleStatus(ctx context.Context, vehicleID int64, status constants.VehicleStatus) error {
-	panic("unimplemented")
+// UpdateVehicle implements [ports.VehicleService]. The row is locked for the
+// whole transaction, so the "previous" warranty in the WarrantyChanged event
+// is exactly what this update replaced.
+func (v *VehicleService) UpdateVehicle(ctx context.Context, vehicleID int64, update entity.VehicleUpdate) (entity.Vehicle, error) {
+	if update.Status == nil && update.WarrantyEndDate == nil {
+		return entity.Vehicle{}, fmt.Errorf("%w: nothing to update", ports.ErrInvalidInput)
+	}
+	if update.Status != nil && !update.Status.Valid() {
+		return entity.Vehicle{}, fmt.Errorf("%w: unknown status %q", ports.ErrInvalidInput, *update.Status)
+	}
+	if update.UpdatedAt.IsZero() {
+		return entity.Vehicle{}, fmt.Errorf("%w: updated_at is required", ports.ErrInvalidInput)
+	}
+
+	var updated entity.Vehicle
+	err := v.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		current, err := v.repository.GetByIDForUpdate(ctx, vehicleID)
+		if err != nil {
+			return err
+		}
+		if !current.UpdatedAt.Equal(update.UpdatedAt) {
+			return fmt.Errorf("%w: the vehicle was changed since you read it; reload and try again", ports.ErrConflict)
+		}
+		if current.Status == constants.StatusScrapped {
+			return fmt.Errorf("%w: a scrapped vehicle can no longer be changed", ports.ErrInvalidState)
+		}
+
+		next := current
+		if update.Status != nil {
+			next.Status = *update.Status
+		}
+		if update.WarrantyEndDate != nil {
+			date := calendarDate(*update.WarrantyEndDate)
+			next.WarrantyEndDate = &date
+		}
+		statusChanged := next.Status != current.Status
+		warrantyChanged := !sameDate(next.WarrantyEndDate, current.WarrantyEndDate)
+		if !statusChanged && !warrantyChanged {
+			updated = current
+			return nil
+		}
+
+		if err := v.repository.Update(ctx, next); err != nil {
+			return err
+		}
+		if updated, err = v.repository.GetByID(ctx, vehicleID); err != nil {
+			return err
+		}
+
+		key := strconv.FormatInt(vehicleID, 10)
+		if err := v.writeEvent(ctx, constants.VehicleUpdate, key, events.VehicleUpdated{
+			EventID:         uuid.NewString(),
+			OccurredAt:      updated.UpdatedAt,
+			VehicleID:       vehicleID,
+			Status:          string(updated.Status),
+			WarrantyEndDate: formatDate(updated.WarrantyEndDate),
+			UpdatedAt:       updated.UpdatedAt,
+		}); err != nil {
+			return err
+		}
+		if warrantyChanged {
+			return v.writeEvent(ctx, constants.WarrantyChanged, key, events.WarrantyChanged{
+				EventID:                 uuid.NewString(),
+				OccurredAt:              updated.UpdatedAt,
+				VehicleID:               vehicleID,
+				PreviousWarrantyEndDate: formatDate(current.WarrantyEndDate),
+				WarrantyEndDate:         formatDate(updated.WarrantyEndDate),
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		if !isClientError(err) {
+			logger.ErrorContext(ctx, "failed to update vehicle", "vehicle", vehicleID, "error", err)
+		}
+		return entity.Vehicle{}, err
+	}
+	return updated, nil
+}
+
+// writeEvent JSON-encodes event into an outbox row. Call it inside the
+// transaction that made the change the event describes.
+func (v *VehicleService) writeEvent(ctx context.Context, topic, key string, event any) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return v.outbox.Create(ctx, entity.OutboxMessage{Topic: topic, Key: key, Payload: payload})
+}
+
+// isClientError reports whether err is one of the sentinel errors a caller
+// caused (and gets told about), as opposed to an internal failure worth
+// logging.
+func isClientError(err error) bool {
+	return errors.Is(err, ports.ErrNotFound) || errors.Is(err, ports.ErrConflict) ||
+		errors.Is(err, ports.ErrInvalidInput) || errors.Is(err, ports.ErrInvalidState)
 }
 
 // GetCustomerVehicle implements [ports.VehicleService].

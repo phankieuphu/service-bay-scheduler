@@ -13,6 +13,7 @@ import (
 	"vehicle-service/pkg/utils"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type VehicleRepository struct {
@@ -48,6 +49,23 @@ func (c VehicleRepository) GetByID(ctx context.Context, id int64) (entity.Vehicl
 	var model models.Vehicle
 
 	if err := database_provider.DBFromContext(ctx, c.db).First(&model, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.Vehicle{}, ports.ErrNotFound
+		}
+		return entity.Vehicle{}, err
+	}
+
+	return c.toDomain(model), nil
+}
+
+// GetByIDForUpdate implements [ports.VehicleRepository].
+func (c VehicleRepository) GetByIDForUpdate(ctx context.Context, id int64) (entity.Vehicle, error) {
+	var model models.Vehicle
+
+	err := database_provider.DBFromContext(ctx, c.db).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&model, id).Error
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return entity.Vehicle{}, ports.ErrNotFound
 		}
@@ -115,10 +133,19 @@ func (c VehicleRepository) List(ctx context.Context, params ports.ListVehiclesPa
 func (c VehicleRepository) Update(ctx context.Context, vehicle entity.Vehicle) error {
 	model := c.toModels(vehicle)
 
+	// Name the mutable columns explicitly. Updates(&model) would also SET
+	// id (a GENERATED ALWAYS column Postgres refuses to update) and
+	// created_at, and would skip fields being set back to NULL.
 	result := database_provider.DBFromContext(ctx, c.db).
 		Model(&models.Vehicle{}).
 		Where("id = ? AND updated_at = ?", model.ID, model.UpdatedAt).
-		Updates(&model)
+		Updates(map[string]any{
+			"license_plate":     model.LicensePlate,
+			"vehicle_model_id":  model.VehicleModelID,
+			"warranty_end_date": model.WarrantyEndDate,
+			"status":            model.Status,
+			"updated_at":        time.Now(),
+		})
 	if result.Error != nil {
 		return writeError(result.Error)
 	}

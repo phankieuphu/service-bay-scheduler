@@ -9,6 +9,9 @@ import (
 type VehicleRepository interface {
 	Create(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error)
 	GetByID(ctx context.Context, id int64) (entity.Vehicle, error)
+	// GetByIDForUpdate is GetByID plus a row lock held until the calling
+	// transaction ends; only meaningful inside TxManager.RunInTx.
+	GetByIDForUpdate(ctx context.Context, id int64) (entity.Vehicle, error)
 	List(ctx context.Context, params ListVehiclesParams) (VehiclePage, error)
 	Update(ctx context.Context, vehicle entity.Vehicle) error
 	Delete(ctx context.Context, id int64) error

@@ -17,3 +17,12 @@ type Vehicle struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
+
+// VehicleUpdate is a partial update: nil fields are left unchanged.
+// UpdatedAt must be the updated_at the caller last read; the update is
+// rejected if the vehicle has changed since.
+type VehicleUpdate struct {
+	Status          *constants.VehicleStatus
+	WarrantyEndDate *time.Time
+	UpdatedAt       time.Time
+}
