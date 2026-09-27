@@ -1,151 +1,46 @@
-# README
+# vehicle-service
 
-## Overview
+Vehicle registry for Service Bay: vehicles, who owns them, their warranty, installed materials, and a service-history read model. Hexagonal layout shared with the other services (see the root [CLAUDE.md](../CLAUDE.md)).
 
-Base code to create new another repository
-
----
-
-## Repository Purpose
-
-* Clean and normalize data from multiple sources
-* Prepare data for banking reports
-* Support extensible data ingestion (DB, Queue, etc.)
-* Follow layered / hexagonal architecture
-
----
-
-## Setup Guide
-
-### Local Environment
-
-1. Create environment variables:
+## Run
 
 ```bash
-cp .env.example .env
+cp .env.example .env         # note: stale template; real vars are in config/config.go
+go run ./cmd/server          # :8080 by default; docker compose runs it on :8081
+go test ./...
 ```
 
-2. Update your local configuration in `.env`
+Schema: [`postgres/init/03-vehicle-service.sql`](../postgres/init/03-vehicle-service.sql). Postgres only runs init scripts on an empty volume, so an existing `postgres_data` volume needs `docker compose down -v` (deletes all local data) to pick up schema changes.
 
-3. Run the initialization script:
+## API
 
-```bash
-sh init.sh
-``` 
+All under `/api/v1`. Errors are `{"error": "..."}`: `400` bad input, `404` unknown vehicle, `409` conflict (duplicate, stale `updated_at`, already owned, or scrapped), `500` generic.
 
----
+| Method & path | Body / query | Success |
+|---|---|---|
+| `POST /vehicle` | `{vin, vehicle_model_id, license_plate?, warranty_end_date?, status?}` | `201` vehicle |
+| `GET /vehicle` | `?cursor=&limit=&vin=&plate=&status=` | `200` `{vehicles, next_cursor?, has_more}` |
+| `GET /vehicle/:id` | | `200` vehicle |
+| `PATCH /vehicle/:id` | `{status?, warranty_end_date?, updated_at}` | `200` vehicle |
+| `POST /vehicle/:id/owner` | `{customer_id, date?}` | `204` |
+| `POST /transfer` | `{vehicle_id, from, to, date?}` | `204` |
+| `GET /customers/:id/vehicles` | | `200` `{vehicles: [vehicle + owned_from]}` |
+| `GET /vehicle/:id/warranty` | `?date=YYYY-MM-DD` (default today) | `200` `{vehicle_id, warranty_end_date, as_of, in_warranty, days_remaining}` |
+| `GET /vehicle/:id/materials` | | `200` `{materials: [{id, material_id, description, count, installed_at}]}` |
+| `GET /vehicle/:id/history` | `?limit=` (default 50, max 200) | `200` `{history: [{id, appointment_id, dealership_id, completed_at, services}]}` |
 
-### Docker Setup
+Rules worth knowing:
 
-```bash
-docker compose up -d
-```
+- **VIN** must be a valid 17-character VIN (no I, O or Q); it's uppercased. **Plates** are normalized to `A-Z0-9` (`51a-123.45` → `51A12345`). Both are unique, and `vin`/`plate` searches use the same normalization.
+- **Dates** (`warranty_end_date`, `date`) are calendar days: send RFC3339, and the day is read in the offset you send. `warranty_end_date` is `null` when there's no warranty. A warranty covers its whole last day.
+- **PATCH** needs the `updated_at` you last read; if the vehicle changed since, it's a `409`, so reload and retry. The response carries the new `updated_at`. `SCRAPPED` is final.
+- **Ownership**: `POST /vehicle/:id/owner` is only for a vehicle with no current owner; after that, use `POST /transfer`.
 
----
+## Events
 
-## Initializing a New Data Flow
+Produced through the transactional outbox (key = vehicle id); consumed: identity-service's `identity.user-events` (logged only, for now) and scheduler-service's `ServiceCompleted`, which feeds `GET /vehicle/:id/history`. Payloads and topics: [architecture-design.md §3b](../docs/architecture-design.md#3b-vehicle-service-event-contracts).
 
-### 1. Define Data Sources
+## Scripts
 
-#### From Database
-
-* Implement repository adapters
-
-#### From Queue
-
-* Location: `internal/adapters/consumer`
-* Steps:
-
-   * Add a new consumer: `{name}Consumer.go`
-   * Define input DTOs in the `/dto` folder
-
----
-
-### 2. Define a New Service
-
-1. Define service interface:
-
-   * File: `internal/domain/ports/services.go`
-
-2. Implement service logic:
-
-   * Folder: `internal/domain/services`
-
-3. Inputs & outputs:
-
-   * Use DTOs from `internal/adapters/http` if the service is HTTP-based
-
----
-
-### 3. Define Outbound Adapters (Repositories)
-
-For database or external storage operations:
-
-1. Define repository interface:
-
-   * `internal/domain/ports/repositories.go`
-
-2. Create adapter struct:
-
-   * `internal/adapters/repositories`
-
-3. Implement repository logic
-
----
-
-## Service Architecture Layers
-
-```
-Config
-  |
-DB Provider
-  |
-Repository (Storage)
-  |
-Service (Use Case)
-```
-
-
-
----
-
-
-
-## Database Configuration
-
-* Define database models in:
-
-```
-internal/adapters/database/models
-```
----
-* **Note**: if your table want to define is SQL please update file **init.sql** your SQL script
-
-## Testing
-
-* Write unit tests for services and repositories
-* Mock external dependencies
-* Run tests using standard Go **tooling**
-* Run `golangci-lint run` for ensure correct syntax
----
-
-## Deployment
-
-* Docker-based deployment
-* Environment-driven configuration
-* CI/CD friendly
-
----
-
-## Contribution Guidelines
-
-* Write tests for all new features
-* Follow existing code structure
-* Code reviews are mandatory
-
----
-
-## Contact
-
-* Repository owner / admin
-* Project team members
+- `scripts/transfer-race-test.sh`: concurrent `POST /transfer` for one vehicle; exactly one must win.
+- `scripts/fake-traffic.sh`: request mix for generating Prometheus metrics.

@@ -11,7 +11,9 @@ export interface Vehicle {
   id: number
   vin: string
   license_plate: string
-  warranty_end_date: string
+  vehicle_model_id: number
+  // null when the vehicle has no warranty on record
+  warranty_end_date: string | null
   status: VehicleStatus
   created_at: string
   updated_at: string

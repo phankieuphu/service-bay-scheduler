@@ -56,7 +56,10 @@ func VehicleApplication(ctx context.Context) {
 	entryVehicleRepository := repository.NewVehicleRepository(database)
 	entryVehicleCustomerRepository := repository.NewVehicleCustomerRepository(database)
 	entryOutboxRepository := repository.NewOutboxRepository(database)
-	entryVehicleService := services.NewVehicleService(*cfg, entryVehicleRepository, entryOutboxRepository, entryVehicleCustomerRepository, txManager, redisCache)
+	entryVehicleMaterialRepository := repository.NewVehicleMaterialRepository(database)
+	entryServiceHistoryRepository := repository.NewServiceHistoryRepository(database)
+	entryVehicleService := services.NewVehicleService(*cfg, entryVehicleRepository, entryOutboxRepository, entryVehicleCustomerRepository, txManager, redisCache,
+		entryVehicleMaterialRepository, entryServiceHistoryRepository)
 
 	// Background workers run on their own context, cancelled only after the
 	// HTTP server has drained, so the outbox relay keeps running while
@@ -69,11 +72,18 @@ func VehicleApplication(ctx context.Context) {
 	outboxRelay := kafka.NewOutboxRelay(kafkaProducer, entryOutboxRepository, outboxRelayInterval)
 	workers.Go(func() { outboxRelay.Start(workerCtx) })
 
-	// Kafka consumer
-	kafkaConsumer, err := kafka.NewConsumer(cfg.Kafka, func(ctx context.Context, key, value []byte) error {
-		logger.Info("kafka message received", "key", string(key), "value", string(value))
-		return nil
-	})
+	// Kafka consumer: one group, one handler per upstream topic.
+	serviceCompleted := kafka.ServiceCompletedHandler(entryVehicleService)
+	kafkaConsumer, err := kafka.NewConsumer(cfg.Kafka, []string{cfg.Kafka.ConsumerTopic, cfg.Kafka.ServiceCompletedTopic},
+		func(ctx context.Context, topic string, key, value []byte) error {
+			switch topic {
+			case cfg.Kafka.ServiceCompletedTopic:
+				return serviceCompleted(ctx, key, value)
+			default:
+				logger.Info("kafka message received", "topic", topic, "key", string(key), "value", string(value))
+				return nil
+			}
+		})
 	if err != nil {
 		logger.Fatal("failed to init Kafka consumer", "error", err)
 	}

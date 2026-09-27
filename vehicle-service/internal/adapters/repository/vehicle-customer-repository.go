@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 	"vehicle-service/internal/adapters/database/models"
 	database_provider "vehicle-service/internal/adapters/database/provider"
@@ -10,6 +11,7 @@ import (
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
+	"vehicle-service/pkg/utils"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -22,40 +24,44 @@ type VehicleCustomerRepository struct {
 // AssignVehicleToCustomer implements [ports.VehicleCustomerRepository].
 func (c VehicleCustomerRepository) AssignVehicleToCustomer(ctx context.Context, vehicleID int64, customerID int64, date time.Time) error {
 	model := models.CustomerVehicle{
-		CustomerID: int64(customerID),
+		CustomerID: customerID,
 		VehicleID:  vehicleID,
-		// Vehicle:    models.Vehicle{},
-		OwnedFrom: date,
-		// OwnedTo:   time.Time{},
-		Status:    constants.OwnershipCurrent,
-		CreatedAt: date,
+		OwnedFrom:  date,
+		Status:     constants.OwnershipCurrent,
 	}
 
-	err := database_provider.DBFromContext(ctx, c.db).Create(&model).Error
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to assign vehicle to customer", "customerID", customerID, "vehicleID", vehicleID)
-		return err
+	// Omit the association, or GORM would try to upsert an empty vehicle.
+	err := database_provider.DBFromContext(ctx, c.db).Omit(clause.Associations).Create(&model).Error
+	switch {
+	case err == nil:
+		return nil
+	case utils.IsDuplicateKeyError(err) && utils.ConstraintName(err) == constants.ConstraintCurrentOwner:
+		return fmt.Errorf("%w: the vehicle already has a current owner", ports.ErrConflict)
+	case utils.IsForeignKeyError(err):
+		return ports.ErrNotFound
 	}
-	return nil
+	logger.ErrorContext(ctx, "failed to assign vehicle to customer", "customerID", customerID, "vehicleID", vehicleID, "error", err)
+	return err
 }
 
-// GetCustomerVehicle implements [ports.VehicleCustomerRepository].
-func (c VehicleCustomerRepository) GetCustomerVehicle(ctx context.Context, customerID int64) (entity.CustomerVehicle, error) {
-	var model models.CustomerVehicle
-	err := database_provider.DBFromContext(ctx, c.db).First(&model).Where("customer =? ", customerID).Error
+// ListCurrentByCustomer implements [ports.VehicleCustomerRepository].
+func (c VehicleCustomerRepository) ListCurrentByCustomer(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error) {
+	var rows []models.CustomerVehicle
+	err := database_provider.DBFromContext(ctx, c.db).
+		Preload("Vehicle").
+		Where("customer_id = ? AND status = ?", customerID, constants.OwnershipCurrent).
+		Order("owned_from DESC, id DESC").
+		Find(&rows).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.CustomerVehicle{}, ports.ErrNotFound
-		}
-		return entity.CustomerVehicle{}, err
+		return nil, err
 	}
-	return c.toDomain(model), nil
-}
 
-// TransferVehicleToCustomer implements [ports.VehicleCustomerRepository].
-// func (c VehicleCustomerRepository) TransferVehicleToCustomer(ctx context.Context, customerID int64) error {
-// 	panic("unimplemented")
-// }
+	ownerships := make([]entity.CustomerVehicle, len(rows))
+	for i, row := range rows {
+		ownerships[i] = c.toDomain(row)
+	}
+	return ownerships, nil
+}
 
 // UnassignVehicleFromCustomer implements [ports.VehicleCustomerRepository].
 func (c VehicleCustomerRepository) UnassignVehicleFromCustomer(ctx context.Context, vehicleID int64, customerID int64, date time.Time) error {
@@ -81,16 +87,8 @@ func (c VehicleCustomerRepository) UnassignVehicleFromCustomer(ctx context.Conte
 
 func (c VehicleCustomerRepository) toDomain(model models.CustomerVehicle) entity.CustomerVehicle {
 	return entity.CustomerVehicle{
-		ID: model.ID,
-		Vehicle: entity.Vehicle{
-			ID:              model.Vehicle.ID,
-			Vin:             model.Vehicle.Vin,
-			LicensePlate:    model.Vehicle.LicensePlate,
-			WarrantyEndDate: model.Vehicle.WarrantyEndDate,
-			Status:          model.Vehicle.Status,
-			CreatedAt:       model.Vehicle.CreatedAt,
-			UpdatedAt:       model.Vehicle.UpdatedAt,
-		},
+		ID:         model.ID,
+		Vehicle:    toVehicleEntity(model.Vehicle),
 		CustomerID: model.CustomerID,
 		OwnedFrom:  model.OwnedFrom,
 		OwnedTo:    model.OwnedTo,
@@ -103,19 +101,11 @@ func (c VehicleCustomerRepository) toModel(e entity.CustomerVehicle) models.Cust
 		ID:         e.ID,
 		CustomerID: e.CustomerID,
 		VehicleID:  e.Vehicle.ID,
-		Vehicle: models.Vehicle{
-			ID:              e.Vehicle.ID,
-			Vin:             e.Vehicle.Vin,
-			LicensePlate:    e.Vehicle.LicensePlate,
-			WarrantyEndDate: e.Vehicle.WarrantyEndDate,
-			Status:          e.Vehicle.Status,
-			CreatedAt:       e.Vehicle.CreatedAt,
-			UpdatedAt:       e.Vehicle.UpdatedAt,
-		},
-		OwnedFrom: e.OwnedFrom,
-		OwnedTo:   e.OwnedTo,
-		Status:    e.Status,
-		CreatedAt: e.CreatedAt,
+		Vehicle:    toVehicleModel(e.Vehicle),
+		OwnedFrom:  e.OwnedFrom,
+		OwnedTo:    e.OwnedTo,
+		Status:     e.Status,
+		CreatedAt:  e.CreatedAt,
 	}
 }
 

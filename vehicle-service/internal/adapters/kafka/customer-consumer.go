@@ -8,15 +8,19 @@ import (
 	"github.com/IBM/sarama"
 )
 
-type MessageHandler func(ctx context.Context, key, value []byte) error
+// MessageHandler handles one message. topic says which subscription it
+// came from, since one consumer group can subscribe to several.
+type MessageHandler func(ctx context.Context, topic string, key, value []byte) error
 
 type Consumer struct {
 	group   sarama.ConsumerGroup
-	topic   string
+	topics  []string
 	handler MessageHandler
 }
 
-func NewConsumer(cfg config.Kafka, handler MessageHandler) (*Consumer, error) {
+// NewConsumer joins cfg.ConsumerGroup subscribed to topics. None of them may
+// be one this service produces to, or it would consume its own output.
+func NewConsumer(cfg config.Kafka, topics []string, handler MessageHandler) (*Consumer, error) {
 	saramaCfg := sarama.NewConfig()
 	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetNewest
 	saramaCfg.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{
@@ -29,14 +33,14 @@ func NewConsumer(cfg config.Kafka, handler MessageHandler) (*Consumer, error) {
 		return nil, err
 	}
 
-	logger.Info("Kafka consumer connected", "group", cfg.ConsumerGroup, "brokers", cfg.Brokers)
-	return &Consumer{group: group, topic: cfg.ConsumerTopic, handler: handler}, nil
+	logger.Info("Kafka consumer connected", "group", cfg.ConsumerGroup, "topics", topics, "brokers", cfg.Brokers)
+	return &Consumer{group: group, topics: topics, handler: handler}, nil
 }
 
 func (c *Consumer) Start(ctx context.Context) {
 	h := &consumerGroupHandler{handler: c.handler}
 	for {
-		if err := c.group.Consume(ctx, []string{c.topic}, h); err != nil {
+		if err := c.group.Consume(ctx, c.topics, h); err != nil {
 			logger.Error("kafka consumer error", "error", err)
 		}
 		if ctx.Err() != nil {
@@ -58,7 +62,7 @@ func (h *consumerGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error { re
 
 func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
-		if err := h.handler(session.Context(), msg.Key, msg.Value); err != nil {
+		if err := h.handler(session.Context(), msg.Topic, msg.Key, msg.Value); err != nil {
 			logger.Error("message handling error", "error", err)
 		} else {
 			session.MarkMessage(msg, "")

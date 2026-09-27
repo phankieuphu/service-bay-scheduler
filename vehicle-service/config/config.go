@@ -43,6 +43,10 @@ type Kafka struct {
 	// from ProducerTopic or this consumer group would replay its own output.
 	ConsumerTopic string
 	ConsumerGroup string
+	// ServiceCompletedTopic is scheduler-service's ServiceCompleted stream,
+	// consumed (in the same ConsumerGroup) to build the per-vehicle service
+	// history read model.
+	ServiceCompletedTopic string
 }
 
 type Redis struct {
@@ -81,10 +85,11 @@ func LoadConfig() *Config {
 			WriteTimeout: time.Duration(getEnvInt("API_WRITE_TIMEOUT_SEC", 30)) * time.Second,
 		},
 		Kafka: Kafka{
-			Brokers:       []string{GetEnv("KAFKA_BROKERS", "localhost:9092")},
-			ProducerTopic: GetEnv("KAFKA_PRODUCER_TOPIC", "vehicle.events"),
-			ConsumerTopic: GetEnv("KAFKA_CONSUMER_TOPIC", "identity.user-events"),
-			ConsumerGroup: GetEnv("KAFKA_CONSUMER_GROUP", "vehicle-service"),
+			Brokers:               []string{GetEnv("KAFKA_BROKERS", "localhost:9092")},
+			ProducerTopic:         GetEnv("KAFKA_PRODUCER_TOPIC", "vehicle.events"),
+			ConsumerTopic:         GetEnv("KAFKA_CONSUMER_TOPIC", "identity.user-events"),
+			ConsumerGroup:         GetEnv("KAFKA_CONSUMER_GROUP", "vehicle-service"),
+			ServiceCompletedTopic: GetEnv("KAFKA_SERVICE_COMPLETED_TOPIC", "scheduler.appointment.service-completed.v1"),
 		},
 		Redis: Redis{
 			Host:     GetEnv("REDIS_HOST", "localhost"),

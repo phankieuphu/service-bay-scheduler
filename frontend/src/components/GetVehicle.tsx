@@ -66,7 +66,7 @@ export function GetVehicle() {
             </tr>
             <tr>
               <th>License plate</th>
-              <td>{vehicle.license_plate}</td>
+              <td>{vehicle.license_plate || '—'}</td>
             </tr>
             <tr>
               <th>Status</th>
@@ -78,7 +78,11 @@ export function GetVehicle() {
             </tr>
             <tr>
               <th>Warranty end date</th>
-              <td>{new Date(vehicle.warranty_end_date).toLocaleDateString()}</td>
+              <td>
+                {vehicle.warranty_end_date
+                  ? new Date(vehicle.warranty_end_date).toLocaleDateString(undefined, { timeZone: 'UTC' })
+                  : '—'}
+              </td>
             </tr>
             <tr>
               <th>Created</th>
