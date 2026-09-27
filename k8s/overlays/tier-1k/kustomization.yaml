@@ -1,0 +1,23 @@
+# Tier 1k users (issue #38): design peak 10 RPS, stress 25 RPS.
+# CPU/memory for this tier are the base manifests' defaults; this overlay only
+# adds the tier's disk sizes. Suggested nodes: 2 x (2 vCPU, 8 GiB).
+#
+#   kubectl apply -k k8s/overlays/tier-1k
+#   TIER=1k ./loadtest/k6/run.sh load
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 5Gi
+  - target: { kind: PersistentVolumeClaim, name: prometheus-data }
+    patch: |
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 10Gi

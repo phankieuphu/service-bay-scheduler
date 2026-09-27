@@ -18,6 +18,22 @@ spec:
         - name: postgres
           image: service-bay-postgres:local
           imagePullPolicy: IfNotPresent
+          # Tuned per load-test tier (issue #38); the base is the 1k tier.
+          args:
+            - -c
+            - max_connections=100
+            - -c
+            - shared_buffers=128MB
+            - -c
+            - effective_cache_size=384MB
+          # limits = requests -> Guaranteed QoS, evicted last
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "250m"
+              memory: "512Mi"
           ports:
             - containerPort: 5432
           env:

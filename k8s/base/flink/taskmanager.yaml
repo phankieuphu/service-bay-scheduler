@@ -1,58 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flink-jobmanager
+  name: flink-taskmanager
   namespace: service-bay
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: flink
-      component: jobmanager
+      component: taskmanager
   template:
     metadata:
       labels:
         app: flink
-        component: jobmanager
+        component: taskmanager
     spec:
       containers:
-        - name: jobmanager
+        - name: taskmanager
           image: flink:1.20-java17
-          args: ["jobmanager"]
+          args: ["taskmanager"]
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1536Mi"
+            limits:
+              cpu: "1"
+              memory: "1536Mi" # = taskmanager.memory.process.size
           envFrom:
             - configMapRef:
                 name: flink-config
           ports:
-            - containerPort: 6123
+            - containerPort: 6122
               name: rpc
-            - containerPort: 6124
-              name: blob
-            - containerPort: 8081
-              name: webui
             - containerPort: 9249
               name: metrics
 ---
+# Headless so Prometheus can reach the TaskManager metrics endpoint by DNS name.
 apiVersion: v1
 kind: Service
 metadata:
-  name: flink-jobmanager
+  name: flink-taskmanager
   namespace: service-bay
 spec:
-  type: NodePort
+  clusterIP: None
   selector:
     app: flink
-    component: jobmanager
+    component: taskmanager
   ports:
-    - name: rpc
-      port: 6123
-      targetPort: 6123
-    - name: blob
-      port: 6124
-      targetPort: 6124
-    - name: webui
-      port: 8081
-      targetPort: 8081
-      nodePort: 30082
     - name: metrics
       port: 9249
       targetPort: 9249

@@ -89,6 +89,8 @@ Before each load run, the runners call `seed/seed.sh reset` to give the whole po
 
 ## Running against Kubernetes
 
+Deploy the cluster sized for the tier you are testing first: `kubectl apply -k k8s/overlays/tier-100k` (see [k8s/README.md](../k8s/README.md#load-test-tiers-issue-38)).
+
 ```bash
 kubectl -n service-bay port-forward svc/customer-service 8080:8080 &
 kubectl -n service-bay port-forward svc/vehicle-service 8081:8081 &

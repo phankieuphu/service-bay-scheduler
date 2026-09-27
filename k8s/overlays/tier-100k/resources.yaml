@@ -1,0 +1,159 @@
+# CPU/memory for the 100k tier. Strategic-merge patches: containers and env
+# entries merge by name, so only the fields listed here change.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-service
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: customer-service
+          env:
+            - name: GOMEMLIMIT
+              value: "217MiB"
+          resources:
+            requests: { cpu: "250m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "256Mi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vehicle-service
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: vehicle-service
+          env:
+            - name: GOMEMLIMIT
+              value: "217MiB"
+          resources:
+            requests: { cpu: "250m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "256Mi" }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          args:
+            - -c
+            - max_connections=100
+            - -c
+            - shared_buffers=512MB
+            - -c
+            - effective_cache_size=1536MB
+          resources:
+            requests: { cpu: "1", memory: "2Gi" }
+            limits: { cpu: "1", memory: "2Gi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+          args: [redis-server, --maxmemory, 200mb, --maxmemory-policy, allkeys-lru, --save, "", --appendonly, "no"]
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "100m", memory: "256Mi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: kafka
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xms1g -Xmx1g"
+          resources:
+            requests: { cpu: "500m", memory: "2Gi" }
+            limits: { cpu: "500m", memory: "2Gi" }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-config
+  namespace: service-bay
+data:
+  FLINK_PROPERTIES: |
+    jobmanager.rpc.address: flink-jobmanager
+    taskmanager.numberOfTaskSlots: 2
+    metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+    metrics.reporter.prom.port: 9249
+    # Must equal each container's memory limit; Flink splits it up internally.
+    jobmanager.memory.process.size: 1536m
+    taskmanager.memory.process.size: 2048m
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-jobmanager
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: jobmanager
+          resources:
+            requests: { cpu: "500m", memory: "1536Mi" }
+            limits: { cpu: "1", memory: "1536Mi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: taskmanager
+          resources:
+            requests: { cpu: "1", memory: "2Gi" }
+            limits: { cpu: "2", memory: "2Gi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: prometheus
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits: { cpu: "1", memory: "1Gi" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: service-bay
+spec:
+  template:
+    spec:
+      containers:
+        - name: grafana
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "200m", memory: "256Mi" }

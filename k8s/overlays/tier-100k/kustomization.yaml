@@ -1,0 +1,34 @@
+# Tier 100k users (issue #38): design peak 100 RPS, stress 250 RPS.
+# Suggested nodes: 3 x (4 vCPU, 8 GiB).
+#
+#   kubectl apply -k k8s/overlays/tier-100k
+#   TIER=100k ./loadtest/k6/run.sh load
+#
+# DB connection budget: 2 services x 3 pods x 10 = 60 < 80 (80% of
+# max_connections=100), so no PgBouncer.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  - path: resources.yaml
+  - target: { kind: HorizontalPodAutoscaler, name: "(customer|vehicle)-service" }
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 20Gi
+  - target: { kind: PersistentVolumeClaim, name: prometheus-data }
+    patch: |
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 20Gi

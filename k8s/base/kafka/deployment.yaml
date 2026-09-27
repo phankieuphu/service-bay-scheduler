@@ -19,9 +19,21 @@ spec:
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.6.0
+          # limits = requests -> Guaranteed QoS, evicted last
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "250m"
+              memory: "1Gi"
           ports:
             - containerPort: 9092
           env:
+            # ~50% of the memory limit; the rest is OS page cache, which Kafka
+            # reads from. cp-kafka's default (1G) would not fit in a 1Gi limit.
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xms512m -Xmx512m"
             - name: KAFKA_BROKER_ID
               value: "1"
             - name: KAFKA_ZOOKEEPER_CONNECT

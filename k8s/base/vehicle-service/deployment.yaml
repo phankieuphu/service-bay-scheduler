@@ -16,6 +16,10 @@ data:
   REDIS_HOST: redis
   REDIS_PORT: "6379"
   REDIS_PASSWORD: ""
+  # Pool per pod. Budget: services x HPA max pods x DB_MAX_OPEN_CONNS must stay
+  # under ~80% of Postgres max_connections (100), or go through PgBouncer (tier-1m).
+  DB_MAX_OPEN_CONNS: "10"
+  DB_MAX_IDLE_CONNS: "5"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -23,7 +27,7 @@ metadata:
   name: vehicle-service
   namespace: service-bay
 spec:
-  replicas: 1
+  # replica count is managed by the HPA (hpa.yaml)
   selector:
     matchLabels:
       app: vehicle-service
@@ -52,6 +56,17 @@ spec:
                 secretKeyRef:
                   name: postgres-credentials
                   key: POSTGRES_PASSWORD
+            - name: GOMEMLIMIT # ~85% of the memory limit, so the GC works harder before an OOM kill
+              value: "108MiB"
+          # Sizes per load-test tier (issue #38); the base is the 1k tier.
+          # CPU limit = 2-4x request, memory limit = request.
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
 ---
 apiVersion: v1
 kind: Service

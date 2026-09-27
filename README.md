@@ -136,7 +136,7 @@ kubectl delete -k k8s/
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| `kafka` pod in `CrashLoopBackOff`, log ends with `port is deprecated. Please use KAFKA_ADVERTISED_LISTENERS instead.` | Kubernetes injects `KAFKA_PORT=tcp://...` for the Service named `kafka`, and the `cp-kafka` image treats every `KAFKA_*` variable as a setting. [k8s/kafka/deployment.yaml](k8s/kafka/deployment.yaml) sets `enableServiceLinks: false` to prevent this. Keep that line. |
+| `kafka` pod in `CrashLoopBackOff`, log ends with `port is deprecated. Please use KAFKA_ADVERTISED_LISTENERS instead.` | Kubernetes injects `KAFKA_PORT=tcp://...` for the Service named `kafka`, and the `cp-kafka` image treats every `KAFKA_*` variable as a setting. [k8s/base/kafka/deployment.yaml](k8s/base/kafka/deployment.yaml) sets `enableServiceLinks: false` to prevent this. Keep that line. |
 | Services in `CrashLoopBackOff` with `failed to init Kafka producer ... connection refused` | Kafka isn't up yet (or is crashing; see the row above). Check `kubectl logs -n service-bay deploy/kafka`. Once Kafka is running, the services recover on their next restart, or run `kubectl rollout restart deploy/customer-service deploy/vehicle-service -n service-bay`. |
 | `ErrImagePull` / `ImagePullBackOff` on a `:local` image | The cluster can't see your local build. Redo step 2 for your cluster type. |
 | `exec format error` on Apple Silicon | The service Dockerfiles hard-code `GOARCH=amd64`. Remove it to build a native arm64 binary. |
@@ -187,14 +187,14 @@ Labels you can filter on:
 
 | | Docker Compose | Kubernetes |
 |-|----------------|------------|
-| Loki config | [loki/loki-config.yaml](loki/loki-config.yaml) | [k8s/loki/](k8s/loki/) (same config in a ConfigMap) |
-| Alloy config | [alloy/config.alloy](alloy/config.alloy): reads containers via the Docker socket | [k8s/alloy/](k8s/alloy/): reads pods in `service-bay` through the Kubernetes API, using a namespace-scoped Role |
+| Loki config | [loki/loki-config.yaml](loki/loki-config.yaml) | [k8s/base/loki/](k8s/base/loki/) (same config in a ConfigMap) |
+| Alloy config | [alloy/config.alloy](alloy/config.alloy): reads containers via the Docker socket | [k8s/base/alloy/](k8s/base/alloy/): reads pods in `service-bay` through the Kubernetes API, using a namespace-scoped Role |
 | Loki API | http://localhost:3100 | `svc/loki:3100` (ClusterIP) |
 | Alloy debug UI | http://localhost:12345 | `svc/alloy:12345` (ClusterIP) |
 
 Loki runs as a single process with filesystem storage and **7-day retention** (`limits_config.retention_period`). That's fine for local and dev use, but not for HA. Keep the k8s Alloy Deployment at **1 replica**: it tails logs through the API server, so a second replica without Alloy clustering would ship every line twice.
 
-If you change `loki/loki-config.yaml`, copy the change into `k8s/loki/configmap.yaml` too. The Alloy configs differ on purpose (Docker vs. Kubernetes discovery), but share the same `loki.process` stage.
+If you change `loki/loki-config.yaml`, copy the change into `k8s/base/loki/configmap.yaml` too. The Alloy configs differ on purpose (Docker vs. Kubernetes discovery), but share the same `loki.process` stage.
 
 Without Grafana, you can still read raw logs with `docker compose logs -f <service>` or `kubectl logs -n service-bay deploy/<name> -f`.
 
