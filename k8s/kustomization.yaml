@@ -17,3 +17,5 @@ resources:
   - grafana/deployment.yaml
   - customer-service/deployment.yaml
   - vehicle-service/deployment.yaml
+  - identity-service/secret.yaml
+  - identity-service/deployment.yaml

@@ -97,6 +97,30 @@ flowchart TB
 
 Every service also writes an **outbox row** in the same transaction as its state change, with a relay process publishing it to Kafka — never call notification-service (or Kafka) synchronously from inside a write transaction.
 
+### 3a. `identity.user-events` contract
+
+Produced by identity-service, consumed by customer-service and vehicle-service (consumer group = service name). Message key is the user id, so one user's events stay ordered on one partition. Value:
+
+```json
+{
+  "event_id": "f7e35498-7c54-40f7-a2c3-d0ce4fcf92e7",
+  "event_type": "UserCreated",
+  "occurred_at": "2026-09-27T16:08:34.33125Z",
+  "user": {
+    "id": "730a9309-3ca5-4110-a8a1-6c0b3b94e416",
+    "email": "jane@example.com",
+    "role": "CUSTOMER",
+    "status": "ACTIVE"
+  }
+}
+```
+
+- `event_type`: `UserCreated` (on register). `UserUpdated` has the same shape and is reserved for when a user's email/role/status can change; nothing emits it yet.
+- `role`: `CUSTOMER` | `TECHNICIAN` | `MANAGER` | `ADMIN`. A consumer ignores roles it doesn't own a profile for.
+- `user.id` is a UUID minted by identity-service. A consuming service stores it as a plain `user_id` reference on its own profile row (§5a), not as that row's primary key.
+- Delivery is at-least-once (outbox relay + Kafka), so consumers must be idempotent — dedupe on `event_id` or upsert by `user.id`.
+- Fields may be added; existing fields are never renamed or removed without a new topic version.
+
 ---
 
 ## 4. Booking correctness across service boundaries
