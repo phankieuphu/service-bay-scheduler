@@ -37,6 +37,11 @@ CREATE TABLE vehicle (
 
 Create Index Idx_Vehicle_Model On Vehicle(Vehicle_Model_Id);
 
+-- vehicle-service stores plates normalized (uppercased, everything but
+-- A-Z0-9 stripped), so this also catches "51A-123.45" vs "51a12345". NULL plates
+-- (not yet registered) don't collide with each other.
+CREATE UNIQUE INDEX uq_vehicle_license_plate ON vehicle(license_plate);
+
 -- Ownership can change over time
 CREATE TABLE customer_vehicle (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

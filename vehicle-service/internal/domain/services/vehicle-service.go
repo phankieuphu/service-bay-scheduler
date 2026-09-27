@@ -3,12 +3,17 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"vehicle-service/config"
 	"vehicle-service/internal/constants"
 	"vehicle-service/internal/domain/entity"
+	"vehicle-service/internal/domain/events"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
+
+	"github.com/google/uuid"
 )
 
 type VehicleService struct {
@@ -30,9 +35,64 @@ func (v *VehicleService) InitialVehicleOwner(ctx context.Context, vehicleID int6
 	panic("unimplemented")
 }
 
-// RegisterVehicle implements [ports.VehicleService].
+// RegisterVehicle implements [ports.VehicleService]. The vehicle row and its
+// VehicleCreated outbox row commit together.
 func (v *VehicleService) RegisterVehicle(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error) {
-	panic("unimplemented")
+	vin, err := normalizeVin(vehicle.Vin)
+	if err != nil {
+		return entity.Vehicle{}, err
+	}
+	plate, err := normalizePlate(vehicle.LicensePlate)
+	if err != nil {
+		return entity.Vehicle{}, err
+	}
+	if vehicle.VehicleModelID <= 0 {
+		return entity.Vehicle{}, fmt.Errorf("%w: vehicle_model_id is required", ports.ErrInvalidInput)
+	}
+	if vehicle.Status == "" {
+		vehicle.Status = constants.StatusActive
+	}
+	if !vehicle.Status.Valid() {
+		return entity.Vehicle{}, fmt.Errorf("%w: unknown status %q", ports.ErrInvalidInput, vehicle.Status)
+	}
+	if vehicle.WarrantyEndDate != nil {
+		date := calendarDate(*vehicle.WarrantyEndDate)
+		vehicle.WarrantyEndDate = &date
+	}
+	vehicle.Vin, vehicle.LicensePlate = vin, plate
+
+	var created entity.Vehicle
+	err = v.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		created, err = v.repository.Create(ctx, vehicle)
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(events.VehicleCreated{
+			EventID:         uuid.NewString(),
+			OccurredAt:      created.CreatedAt,
+			VehicleID:       created.ID,
+			Vin:             created.Vin,
+			LicensePlate:    created.LicensePlate,
+			VehicleModelID:  created.VehicleModelID,
+			WarrantyEndDate: formatDate(created.WarrantyEndDate),
+			Status:          string(created.Status),
+		})
+		if err != nil {
+			return err
+		}
+		return v.outbox.Create(ctx, entity.OutboxMessage{
+			Key:     strconv.FormatInt(created.ID, 10),
+			Topic:   constants.VehicleCreated,
+			Payload: payload,
+		})
+	})
+	if err != nil {
+		if !errors.Is(err, ports.ErrConflict) && !errors.Is(err, ports.ErrInvalidInput) {
+			logger.ErrorContext(ctx, "failed to register vehicle", "vin", vin, "error", err)
+		}
+		return entity.Vehicle{}, err
+	}
+	return created, nil
 }
 
 // UpdateVehicleStatus implements [ports.VehicleService].

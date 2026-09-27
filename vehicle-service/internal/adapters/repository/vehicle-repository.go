@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 	"vehicle-service/internal/adapters/database/models"
 	database_provider "vehicle-service/internal/adapters/database/provider"
+	"vehicle-service/internal/constants"
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/utils"
@@ -21,10 +24,7 @@ func (c VehicleRepository) Create(ctx context.Context, vehicle entity.Vehicle) (
 	model := c.toModels(vehicle)
 
 	if err := database_provider.DBFromContext(ctx, c.db).Create(&model).Error; err != nil {
-		if utils.IsDuplicateKeyError(err) {
-			return entity.Vehicle{}, ports.ErrConflict
-		}
-		return entity.Vehicle{}, err
+		return entity.Vehicle{}, writeError(err)
 	}
 
 	return c.toDomain(model), nil
@@ -111,10 +111,7 @@ func (c VehicleRepository) Update(ctx context.Context, vehicle entity.Vehicle) e
 		Where("id = ? AND updated_at = ?", model.ID, model.UpdatedAt).
 		Updates(&model)
 	if result.Error != nil {
-		if utils.IsDuplicateKeyError(result.Error) {
-			return ports.ErrConflict
-		}
-		return result.Error
+		return writeError(result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return c.updateFailureReason(ctx, model.ID)
@@ -141,11 +138,44 @@ func (c VehicleRepository) updateFailureReason(ctx context.Context, id int64) er
 	return ports.ErrConflict
 }
 
+// writeError maps constraint violations on the vehicle table to the
+// port's sentinel errors, naming the field so the client knows what to fix.
+func writeError(err error) error {
+	switch {
+	case utils.IsDuplicateKeyError(err):
+		switch utils.ConstraintName(err) {
+		case constants.ConstraintVehicleVin:
+			return fmt.Errorf("%w: a vehicle with this VIN is already registered", ports.ErrConflict)
+		case constants.ConstraintVehicleLicensePlate:
+			return fmt.Errorf("%w: a vehicle with this license plate is already registered", ports.ErrConflict)
+		}
+		return ports.ErrConflict
+	case utils.IsForeignKeyError(err) && utils.ConstraintName(err) == constants.ConstraintVehicleModelFK:
+		return fmt.Errorf("%w: unknown vehicle_model_id", ports.ErrInvalidInput)
+	}
+	return err
+}
+
 func (c VehicleRepository) toModels(vehicle entity.Vehicle) models.Vehicle {
+	return toVehicleModel(vehicle)
+}
+
+func (c VehicleRepository) toDomain(model models.Vehicle) entity.Vehicle {
+	return toVehicleEntity(model)
+}
+
+// toVehicleModel and toVehicleEntity are shared with the repositories that
+// load a vehicle alongside their own rows (ownership, materials).
+func toVehicleModel(vehicle entity.Vehicle) models.Vehicle {
+	var plate *string
+	if vehicle.LicensePlate != "" {
+		plate = &vehicle.LicensePlate
+	}
 	return models.Vehicle{
 		ID:              vehicle.ID,
 		Vin:             vehicle.Vin,
-		LicensePlate:    vehicle.LicensePlate,
+		LicensePlate:    plate,
+		VehicleModelID:  vehicle.VehicleModelID,
 		WarrantyEndDate: vehicle.WarrantyEndDate,
 		Status:          vehicle.Status,
 		CreatedAt:       vehicle.CreatedAt,
@@ -153,12 +183,24 @@ func (c VehicleRepository) toModels(vehicle entity.Vehicle) models.Vehicle {
 	}
 }
 
-func (c VehicleRepository) toDomain(model models.Vehicle) entity.Vehicle {
+func toVehicleEntity(model models.Vehicle) entity.Vehicle {
+	var plate string
+	if model.LicensePlate != nil {
+		plate = *model.LicensePlate
+	}
+	var warranty *time.Time
+	if model.WarrantyEndDate != nil {
+		// A date column scans in the connection's zone; pin it to UTC
+		// midnight so it matches what the service layer writes.
+		date := time.Date(model.WarrantyEndDate.Year(), model.WarrantyEndDate.Month(), model.WarrantyEndDate.Day(), 0, 0, 0, 0, time.UTC)
+		warranty = &date
+	}
 	return entity.Vehicle{
 		ID:              model.ID,
 		Vin:             model.Vin,
-		LicensePlate:    model.LicensePlate,
-		WarrantyEndDate: model.WarrantyEndDate,
+		LicensePlate:    plate,
+		VehicleModelID:  model.VehicleModelID,
+		WarrantyEndDate: warranty,
 		Status:          model.Status,
 		CreatedAt:       model.CreatedAt,
 		UpdatedAt:       model.UpdatedAt,

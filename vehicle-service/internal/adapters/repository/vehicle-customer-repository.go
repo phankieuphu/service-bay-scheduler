@@ -81,16 +81,8 @@ func (c VehicleCustomerRepository) UnassignVehicleFromCustomer(ctx context.Conte
 
 func (c VehicleCustomerRepository) toDomain(model models.CustomerVehicle) entity.CustomerVehicle {
 	return entity.CustomerVehicle{
-		ID: model.ID,
-		Vehicle: entity.Vehicle{
-			ID:              model.Vehicle.ID,
-			Vin:             model.Vehicle.Vin,
-			LicensePlate:    model.Vehicle.LicensePlate,
-			WarrantyEndDate: model.Vehicle.WarrantyEndDate,
-			Status:          model.Vehicle.Status,
-			CreatedAt:       model.Vehicle.CreatedAt,
-			UpdatedAt:       model.Vehicle.UpdatedAt,
-		},
+		ID:         model.ID,
+		Vehicle:    toVehicleEntity(model.Vehicle),
 		CustomerID: model.CustomerID,
 		OwnedFrom:  model.OwnedFrom,
 		OwnedTo:    model.OwnedTo,
@@ -103,19 +95,11 @@ func (c VehicleCustomerRepository) toModel(e entity.CustomerVehicle) models.Cust
 		ID:         e.ID,
 		CustomerID: e.CustomerID,
 		VehicleID:  e.Vehicle.ID,
-		Vehicle: models.Vehicle{
-			ID:              e.Vehicle.ID,
-			Vin:             e.Vehicle.Vin,
-			LicensePlate:    e.Vehicle.LicensePlate,
-			WarrantyEndDate: e.Vehicle.WarrantyEndDate,
-			Status:          e.Vehicle.Status,
-			CreatedAt:       e.Vehicle.CreatedAt,
-			UpdatedAt:       e.Vehicle.UpdatedAt,
-		},
-		OwnedFrom: e.OwnedFrom,
-		OwnedTo:   e.OwnedTo,
-		Status:    e.Status,
-		CreatedAt: e.CreatedAt,
+		Vehicle:    toVehicleModel(e.Vehicle),
+		OwnedFrom:  e.OwnedFrom,
+		OwnedTo:    e.OwnedTo,
+		Status:     e.Status,
+		CreatedAt:  e.CreatedAt,
 	}
 }
 
