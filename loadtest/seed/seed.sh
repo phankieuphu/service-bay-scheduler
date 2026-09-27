@@ -6,7 +6,8 @@
 # data in postgres/seed/:
 #   customers  email LIKE 'lt-%@example.com'   ('lt-seed-*' = seeded here,
 #                                               'lt-<run>-*' = created by tests)
-#   vehicles   vin   LIKE 'LT%'
+#   vehicles   vehicle_model 'LoadTest LT-1 2024' (VINs 'LT' + 15 digits; match on
+#              the model, not the VIN — random VINs in postgres/seed can start with LT)
 #
 # Usage:
 #   ./seed/seed.sh          # seed (idempotent) + reset transfer-pool ownership
@@ -40,6 +41,12 @@ fi
 
 # q <db> <sql> — run SQL, print unaligned tuples only.
 q() { $PSQL -d "$1" -v ON_ERROR_STOP=1 -qAt -c "$2"; }
+
+# Predicate for load-test vehicles. Match on the dedicated model, not
+# vin LIKE 'LT%': postgres/seed/init-vehicle.sql has random VINs, some of
+# which start with "LT" and would otherwise be reassigned or deleted here.
+LT_VEHICLE="vehicle_model_id IN (SELECT id FROM vehicle_model
+                                 WHERE make = 'LoadTest' AND model = 'LT-1' AND year = 2024)"
 
 check_customer_schema() {
   # GORM's soft-delete field (models.Customer.DeleteAt) needs this column;
@@ -92,21 +99,21 @@ reset_ownership() {
   q vehicle_db "
     BEGIN;
     DELETE FROM customer_vehicle
-    WHERE vehicle_id IN (SELECT id FROM vehicle WHERE vin LIKE 'LT%');
+    WHERE vehicle_id IN (SELECT id FROM vehicle WHERE $LT_VEHICLE);
     INSERT INTO customer_vehicle (customer_id, vehicle_id, owned_from, status)
     SELECT CASE WHEN rn <= $TRANSFER_POOL + 1 THEN $a
                 ELSE $lt_min + 2 + (rn % GREATEST($lt_count - 2, 1)) END,
            id, current_date - 365, 'CURRENT'
     FROM (SELECT id, row_number() OVER (ORDER BY id) rn
-          FROM vehicle WHERE vin LIKE 'LT%') v;
+          FROM vehicle WHERE $LT_VEHICLE) v;
     COMMIT" >/dev/null
 }
 
 clean() {
   echo "Deleting load-test rows..."
   q vehicle_db "
-    DELETE FROM customer_vehicle WHERE vehicle_id IN (SELECT id FROM vehicle WHERE vin LIKE 'LT%');
-    DELETE FROM vehicle WHERE vin LIKE 'LT%';
+    DELETE FROM customer_vehicle WHERE vehicle_id IN (SELECT id FROM vehicle WHERE $LT_VEHICLE);
+    DELETE FROM vehicle WHERE $LT_VEHICLE;
     DELETE FROM vehicle_model WHERE make = 'LoadTest'" >/dev/null
   q customer_db "DELETE FROM customer WHERE email LIKE 'lt-%@example.com'" >/dev/null
   rm -f "$ENV_FILE"
@@ -123,9 +130,9 @@ write_env() {
 
   veh_min=$(q vehicle_db "SELECT min(id) FROM vehicle")
   veh_max=$(q vehicle_db "SELECT max(id) FROM vehicle")
-  pool_start=$(q vehicle_db "SELECT min(id) FROM vehicle WHERE vin LIKE 'LT%'")
-  pool_end=$(q vehicle_db "SELECT id FROM vehicle WHERE vin LIKE 'LT%' ORDER BY id OFFSET $((TRANSFER_POOL - 1)) LIMIT 1")
-  smoke_vid=$(q vehicle_db "SELECT id FROM vehicle WHERE vin LIKE 'LT%' ORDER BY id OFFSET $TRANSFER_POOL LIMIT 1")
+  pool_start=$(q vehicle_db "SELECT min(id) FROM vehicle WHERE $LT_VEHICLE")
+  pool_end=$(q vehicle_db "SELECT id FROM vehicle WHERE $LT_VEHICLE ORDER BY id OFFSET $((TRANSFER_POOL - 1)) LIMIT 1")
+  smoke_vid=$(q vehicle_db "SELECT id FROM vehicle WHERE $LT_VEHICLE ORDER BY id OFFSET $TRANSFER_POOL LIMIT 1")
 
   # Runners compute vehicle ids as start + offset, so the pool must be contiguous.
   if [ $((pool_end - pool_start + 1)) -ne "$TRANSFER_POOL" ]; then
