@@ -61,6 +61,38 @@ services:
       - "8081:8081"
     networks:
       - backend
+  identity-service:
+    build:
+      context: ./identity-service
+      dockerfile: Dockerfile
+    container_name: identity-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: identity_db
+      DB_SSLMODE: disable
+      API_PORT: 8083
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_PRODUCER_TOPIC: identity.user-events
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      # Local-dev only. Services that validate access tokens themselves
+      # must share this value.
+      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+    ports:
+      - "8083:8083"
+    networks:
+      - backend
 
   postgres:
     image: postgres:16

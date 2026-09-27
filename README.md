@@ -61,6 +61,7 @@ All manifests live under [k8s/](k8s/) and are wired together with a `kustomizati
 ```bash
 docker build -t customer-service:local ./customer-service
 docker build -t vehicle-service:local ./vehicle-service
+docker build -t identity-service:local ./identity-service
 docker build -t service-bay-postgres:local ./postgres
 ```
 
@@ -73,7 +74,7 @@ eval $(minikube docker-env)
 For `kind`, load the images into the cluster instead:
 
 ```bash
-kind load docker-image customer-service:local vehicle-service:local service-bay-postgres:local
+kind load docker-image customer-service:local vehicle-service:local identity-service:local service-bay-postgres:local
 ```
 
 2. Apply all manifests via Kustomize:
@@ -94,6 +95,7 @@ kubectl get pods -n service-bay
 |------------------|-------|
 | customer-service | 30080 |
 | vehicle-service  | 30081 |
+| identity-service | 30083 |
 | prometheus       | 30090 |
 | grafana          | 30030 |
 | flink (web UI)   | 30082 |
