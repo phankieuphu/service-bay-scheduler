@@ -13,6 +13,9 @@ spec:
       labels:
         app: kafka
     spec:
+      # The "kafka" Service would otherwise inject KAFKA_PORT=tcp://..., which
+      # cp-kafka's startup script rejects ("port is deprecated") and exits.
+      enableServiceLinks: false
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.6.0

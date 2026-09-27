@@ -13,6 +13,10 @@ resources:
   - flink/taskmanager.yaml
   - prometheus/configmap.yaml
   - prometheus/deployment.yaml
+  - loki/configmap.yaml
+  - loki/deployment.yaml
+  - alloy/configmap.yaml
+  - alloy/deployment.yaml
   - grafana/configmap.yaml
   - grafana/deployment.yaml
   - customer-service/deployment.yaml

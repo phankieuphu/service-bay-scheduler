@@ -34,4 +34,8 @@ NodePort services are exposed on the cluster node's IP:
 - grafana: 30030 (admin/admin)
 - flink web UI: 30082
 
-postgres, zookeeper, kafka and redis are ClusterIP-only, matching their internal-only role in `docker-compose.yml`.
+postgres, zookeeper, kafka, redis, loki and alloy are ClusterIP-only, matching their internal-only role in `docker-compose.yml`.
+
+## Logs
+
+`alloy/` runs Grafana Alloy (1 replica, namespace-scoped Role for `pods` and `pods/log`). It tails every pod in `service-bay` through the API server and pushes to `loki/` (single-binary, 2Gi PVC, 7-day retention). Grafana has Loki provisioned as a datasource: open **Explore → Loki** and query e.g. `{service="vehicle-service", level="ERROR"}`. See the Observability section of the root README for details.
