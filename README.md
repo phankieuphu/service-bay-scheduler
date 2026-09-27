@@ -69,12 +69,13 @@ kubectl config use-context docker-desktop
 ```bash
 docker build -t customer-service:local ./customer-service
 docker build -t vehicle-service:local ./vehicle-service
+docker build -t identity-service:local ./identity-service
 docker build -t service-bay-postgres:local ./postgres
 ```
 
 - **Docker Desktop**: images are shared with the cluster automatically, as long as Settings → General → "Use containerd for pulling and storing images" is on. Nothing else to do.
 - **minikube**: run `eval $(minikube docker-env)` before building, or `minikube image load <image>` afterwards.
-- **kind**: `kind load docker-image customer-service:local vehicle-service:local service-bay-postgres:local`
+- **kind**: `kind load docker-image customer-service:local vehicle-service:local identity-service:local service-bay-postgres:local`
 
 3. Apply all manifests via Kustomize:
 
@@ -96,6 +97,7 @@ kubectl get pods -n service-bay -w
 |------------------|--------------|----------|
 | customer-service | 8080         | 30080    |
 | vehicle-service  | 8081         | 30081    |
+| identity-service | 8083         | 30083    |
 | prometheus       | 9090         | 30090    |
 | grafana          | 3000         | 30030    |
 | flink (web UI)   | 8081         | 30082    |
@@ -105,6 +107,7 @@ Docker Desktop's Kubernetes (kind-based) does **not** expose NodePorts on `local
 ```bash
 kubectl port-forward -n service-bay svc/customer-service 8080:8080
 kubectl port-forward -n service-bay svc/vehicle-service  8081:8081
+kubectl port-forward -n service-bay svc/identity-service 8083:8083
 kubectl port-forward -n service-bay svc/grafana          3000:3000   # admin/admin
 kubectl port-forward -n service-bay svc/prometheus       9090:9090
 kubectl port-forward -n service-bay svc/flink-jobmanager 8082:8081

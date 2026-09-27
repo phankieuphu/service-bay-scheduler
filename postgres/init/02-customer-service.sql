@@ -37,4 +37,4 @@ CREATE TABLE outbox_message (
 -- cheap regardless of how many published rows have piled up.
 CREATE INDEX idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;
 
-AFTER TABLE CUSTOMER ADD COLUMN 'delete_at' timestamptz DEFAULT NULL;
+ALTER TABLE customer ADD COLUMN delete_at timestamptz DEFAULT NULL;

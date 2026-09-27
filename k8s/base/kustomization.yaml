@@ -23,3 +23,5 @@ resources:
   - customer-service/hpa.yaml
   - vehicle-service/deployment.yaml
   - vehicle-service/hpa.yaml
+  - identity-service/secret.yaml
+  - identity-service/deployment.yaml

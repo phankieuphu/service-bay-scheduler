@@ -8,6 +8,10 @@ const (
 	StatusScrapped VehicleStatus = "SCRAPPED"
 )
 
+func (s VehicleStatus) Valid() bool {
+	return s == StatusActive || s == StatusSold || s == StatusScrapped
+}
+
 // OwnershipStatus is the status of a customer_vehicle row (who currently
 // owns/owned a vehicle), distinct from VehicleStatus (the vehicle itself).
 type OwnershipStatus string

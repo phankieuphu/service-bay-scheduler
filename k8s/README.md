@@ -9,13 +9,14 @@ The manifests reference locally-built images, not a registry:
 ```sh
 docker build -t customer-service:local ./customer-service
 docker build -t vehicle-service:local ./vehicle-service
+docker build -t identity-service:local ./identity-service
 docker build -t service-bay-postgres:local ./postgres
 ```
 
 Load them into your cluster (kind example — minikube uses `minikube image load`):
 
 ```sh
-kind load docker-image customer-service:local vehicle-service:local service-bay-postgres:local
+kind load docker-image customer-service:local vehicle-service:local identity-service:local service-bay-postgres:local
 ```
 
 ## Apply
@@ -68,6 +69,7 @@ NodePort services are exposed on the cluster node's IP:
 
 - customer-service: 30080
 - vehicle-service: 30081
+- identity-service: 30083
 - prometheus: 30090
 - grafana: 30030 (admin/admin)
 - flink web UI: 30082

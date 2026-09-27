@@ -14,9 +14,11 @@ import (
 type MockVehicleRepository struct {
 	CreateFunc  func(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error)
 	GetByIDFunc func(ctx context.Context, id int64) (entity.Vehicle, error)
-	ListFunc    func(ctx context.Context, params ports.ListVehiclesParams) (ports.VehiclePage, error)
-	UpdateFunc  func(ctx context.Context, vehicle entity.Vehicle) error
-	DeleteFunc  func(ctx context.Context, id int64) error
+	// GetByIDForUpdateFunc defaults to GetByIDFunc when unset.
+	GetByIDForUpdateFunc func(ctx context.Context, id int64) (entity.Vehicle, error)
+	ListFunc             func(ctx context.Context, params ports.ListVehiclesParams) (ports.VehiclePage, error)
+	UpdateFunc           func(ctx context.Context, vehicle entity.Vehicle) error
+	DeleteFunc           func(ctx context.Context, id int64) error
 }
 
 func (m *MockVehicleRepository) Create(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error) {
@@ -24,6 +26,13 @@ func (m *MockVehicleRepository) Create(ctx context.Context, vehicle entity.Vehic
 }
 
 func (m *MockVehicleRepository) GetByID(ctx context.Context, id int64) (entity.Vehicle, error) {
+	return m.GetByIDFunc(ctx, id)
+}
+
+func (m *MockVehicleRepository) GetByIDForUpdate(ctx context.Context, id int64) (entity.Vehicle, error) {
+	if m.GetByIDForUpdateFunc != nil {
+		return m.GetByIDForUpdateFunc(ctx, id)
+	}
 	return m.GetByIDFunc(ctx, id)
 }
 
@@ -40,13 +49,13 @@ func (m *MockVehicleRepository) Delete(ctx context.Context, id int64) error {
 }
 
 type MockVehicleCustomerRepository struct {
-	GetCustomerVehicleFunc          func(ctx context.Context, customerID int64) (entity.CustomerVehicle, error)
+	ListCurrentByCustomerFunc       func(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error)
 	AssignVehicleToCustomerFunc     func(ctx context.Context, vehicleID, customerID int64, date time.Time) error
 	UnassignVehicleFromCustomerFunc func(ctx context.Context, vehicleID, customerID int64, date time.Time) error
 }
 
-func (m *MockVehicleCustomerRepository) GetCustomerVehicle(ctx context.Context, customerID int64) (entity.CustomerVehicle, error) {
-	return m.GetCustomerVehicleFunc(ctx, customerID)
+func (m *MockVehicleCustomerRepository) ListCurrentByCustomer(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error) {
+	return m.ListCurrentByCustomerFunc(ctx, customerID)
 }
 
 func (m *MockVehicleCustomerRepository) AssignVehicleToCustomer(ctx context.Context, vehicleID, customerID int64, date time.Time) error {
@@ -73,6 +82,27 @@ func (m *MockOutboxRepository) FetchUnpublished(ctx context.Context, limit int) 
 
 func (m *MockOutboxRepository) MarkPublished(ctx context.Context, ids []int64) error {
 	return m.MarkPublishedFunc(ctx, ids)
+}
+
+type MockVehicleMaterialRepository struct {
+	ListByVehicleFunc func(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error)
+}
+
+func (m *MockVehicleMaterialRepository) ListByVehicle(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error) {
+	return m.ListByVehicleFunc(ctx, vehicleID)
+}
+
+type MockServiceHistoryRepository struct {
+	RecordFunc        func(ctx context.Context, entry entity.ServiceHistoryEntry) (bool, error)
+	ListByVehicleFunc func(ctx context.Context, vehicleID int64, limit int) ([]entity.ServiceHistoryEntry, error)
+}
+
+func (m *MockServiceHistoryRepository) Record(ctx context.Context, entry entity.ServiceHistoryEntry) (bool, error) {
+	return m.RecordFunc(ctx, entry)
+}
+
+func (m *MockServiceHistoryRepository) ListByVehicle(ctx context.Context, vehicleID int64, limit int) ([]entity.ServiceHistoryEntry, error) {
+	return m.ListByVehicleFunc(ctx, vehicleID, limit)
 }
 
 type MockTxManager struct {
@@ -135,7 +165,7 @@ func TestVehicleService_GetVehicle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &MockVehicleRepository{GetByIDFunc: tt.getByIDFunc}
-			vehicleService := NewVehicleService(config.Config{}, repo, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{})
+			vehicleService := NewVehicleService(config.Config{}, repo, &MockOutboxRepository{}, &MockVehicleCustomerRepository{}, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 
 			result, err := vehicleService.GetVehicle(context.Background(), tt.vehicleID)
 
@@ -328,7 +358,7 @@ func TestVehicleService_Transfer(t *testing.T) {
 				RunInTxFunc: tt.runInTxFunc,
 			}
 
-			vehicleService := NewVehicleService(config.Config{}, &MockVehicleRepository{}, outboxRepo, vehicleCustomerRepo, txManager, &MockCache{})
+			vehicleService := NewVehicleService(config.Config{}, &MockVehicleRepository{}, outboxRepo, vehicleCustomerRepo, txManager, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
 
 			err := vehicleService.TransferVehicle(context.Background(), tt.transferVehicle)
 			if !errors.Is(err, tt.wantErr) {
