@@ -1,4 +1,5 @@
-import { jsonBody, request } from './http'
+import { jsonBody } from './http'
+import { authorizedRequest } from './session'
 
 export { ApiError } from './http'
 
@@ -52,24 +53,24 @@ export function inputToBirthDay(date: string): string {
 
 export function listCustomers(cursor = 0, limit = 20): Promise<CustomerPage> {
   const params = new URLSearchParams({ cursor: String(cursor), limit: String(limit) })
-  return request(`${BASE_URL}/customer?${params}`)
+  return authorizedRequest(`${BASE_URL}/customer?${params}`)
 }
 
 export function getCustomer(customerId: number): Promise<Customer> {
-  return request(`${BASE_URL}/customer/${customerId}`)
+  return authorizedRequest(`${BASE_URL}/customer/${customerId}`)
 }
 
 export function createCustomer(payload: CreateCustomerPayload): Promise<Customer> {
-  return request(`${BASE_URL}/customer`, jsonBody('POST', payload))
+  return authorizedRequest(`${BASE_URL}/customer`, jsonBody('POST', payload))
 }
 
 export function updateCustomer(
   customerId: number,
   payload: UpdateCustomerPayload,
 ): Promise<void> {
-  return request(`${BASE_URL}/customer/${customerId}`, jsonBody('PUT', payload))
+  return authorizedRequest(`${BASE_URL}/customer/${customerId}`, jsonBody('PUT', payload))
 }
 
 export function deleteCustomer(customerId: number): Promise<void> {
-  return request(`${BASE_URL}/customer/${customerId}`, { method: 'DELETE' })
+  return authorizedRequest(`${BASE_URL}/customer/${customerId}`, { method: 'DELETE' })
 }
