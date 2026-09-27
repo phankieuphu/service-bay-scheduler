@@ -55,7 +55,18 @@ Sizing rules used everywhere (from the issue):
 - **JVM heaps follow the limit:** `KAFKA_HEAP_OPTS` is about 50% of the limit. Flink's `*.memory.process.size` equals the container limit. The images' default heaps would get OOM-killed inside these limits.
 - **DB connection budget:** services × HPA max × `DB_MAX_OPEN_CONNS` must stay under 80% of `max_connections` (100). tier-1m exceeds that (240), so it adds PgBouncer in transaction mode, which uses at most 48 Postgres connections. `max_prepared_statements` is set because GORM uses `PrepareStmt: true`.
 
-**Switching tiers on an existing cluster:** CPU, memory, replicas and config change in place. Disk sizes do not: a StatefulSet's `volumeClaimTemplates` is immutable, and the `local-path` storage class (Docker Desktop, kind) can't grow a PVC, so `apply` reports those two objects as forbidden. To get a tier's disk sizes, start from a fresh namespace (`kubectl delete -k k8s/`, which **deletes the data**, then apply the overlay). `local-path` doesn't enforce sizes, so locally you can ignore those errors.
+**Switching tiers on an existing cluster:** CPU, memory, replicas and config change in place. Disk sizes do not: a StatefulSet's `volumeClaimTemplates` is immutable, and the `local-path` storage class (Docker Desktop, kind) can't grow a PVC, so `apply` reports those two objects as forbidden.
+
+- **Postgres StatefulSet error: don't ignore it.** The API server rejects the whole patch, so the tier's Postgres `args` and resources don't get applied either. To fix it, delete only the StatefulSet object. Its pod and PVC (and your data) stay. Then apply again:
+
+  ```bash
+  kubectl -n service-bay delete statefulset postgres --cascade=orphan
+  kubectl apply -k k8s/overlays/<tier>
+  ```
+
+  The new StatefulSet adopts `postgres-0` and restarts it with the tier's settings. The existing PVC keeps its old size.
+- **`prometheus-data` PVC error:** safe to ignore locally, because `local-path` doesn't enforce sizes.
+- **To get a tier's actual disk sizes,** start from a fresh namespace. Run `kubectl delete -k k8s/`, which **deletes the data**, then apply the overlay.
 
 **Not implemented yet** (the issue's 1M column goes beyond what the app can use today):
 
