@@ -31,6 +31,7 @@ func (h *VehicleHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/vehicle", h.ListVehicles)
 	r.GET("/vehicle/:id", h.GetVehicle)
 	r.PATCH("/vehicle/:id", h.UpdateVehicle)
+	r.POST("/vehicle/:id/owner", h.AssignInitialOwner)
 }
 
 func (h *VehicleHandler) RegisterVehicle(c *gin.Context) {
@@ -161,6 +162,31 @@ func (h *VehicleHandler) UpdateVehicle(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.NewVehicleResponseDTO(vehicle))
+}
+
+// AssignInitialOwner is for a vehicle that has never had an owner (or whose
+// last owner was removed); it returns 409 if the vehicle already has one.
+func (h *VehicleHandler) AssignInitialOwner(c *gin.Context) {
+	vehicleID, ok := pathID(c, "id", "vehicle")
+	if !ok {
+		return
+	}
+	var req dto.AssignOwnerDTO
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	date := time.Now()
+	if req.Date != nil {
+		date = *req.Date
+	}
+	if err := h.service.AssignInitialOwner(c.Request.Context(), vehicleID, req.CustomerID, date); err != nil {
+		writeError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 // writeError maps the sentinel errors in ports/errors.go to status codes.

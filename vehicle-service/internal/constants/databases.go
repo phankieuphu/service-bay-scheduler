@@ -11,4 +11,5 @@ const (
 	ConstraintVehicleVin          = "vehicle_vin_key"
 	ConstraintVehicleLicensePlate = "uq_vehicle_license_plate"
 	ConstraintVehicleModelFK      = "vehicle_vehicle_model_id_fkey"
+	ConstraintCurrentOwner        = "uq_vehicle_current_owner"
 )

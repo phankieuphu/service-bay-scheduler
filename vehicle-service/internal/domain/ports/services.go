@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 	"vehicle-service/internal/domain/entity"
 )
 
@@ -12,7 +13,9 @@ type VehicleService interface {
 	TransferVehicle(ctx context.Context, transferVehicle entity.TransferVehicle) error
 	RegisterVehicle(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error) // register new vehicle
 	UpdateVehicle(ctx context.Context, vehicleID int64, update entity.VehicleUpdate) (entity.Vehicle, error)
-	InitialVehicleOwner(ctx context.Context, vehicleID int64, owner int64) error // assign just work with vehicle was has owner
+	// AssignInitialOwner gives a vehicle with no current owner its first
+	// one; after that, ownership changes go through TransferVehicle.
+	AssignInitialOwner(ctx context.Context, vehicleID, customerID int64, date time.Time) error
 	// GetWarranty(ctx context.Context, vehicleID int64)
 	// VehicleHistory(ctx context.Context, vehicleID int64) // vehicle history
 	GetVehicleMaterials(ctx context.Context, vehicleID int64) (entity.VehicleMaterial, error)

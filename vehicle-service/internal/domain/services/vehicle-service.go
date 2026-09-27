@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 	"vehicle-service/config"
 	"vehicle-service/internal/constants"
 	"vehicle-service/internal/domain/entity"
@@ -30,9 +31,45 @@ func (v *VehicleService) GetVehicleMaterials(ctx context.Context, vehicleID int6
 	panic("unimplemented")
 }
 
-// InitialVehicleOwner implements [ports.VehicleService].
-func (v *VehicleService) InitialVehicleOwner(ctx context.Context, vehicleID int64, owner int64) error {
-	panic("unimplemented")
+// AssignInitialOwner implements [ports.VehicleService]. The vehicle row is
+// locked first so concurrent assignments queue up behind each other; the
+// uq_vehicle_current_owner index is what finally guarantees at most one
+// current owner.
+func (v *VehicleService) AssignInitialOwner(ctx context.Context, vehicleID, customerID int64, date time.Time) error {
+	if customerID <= 0 {
+		return fmt.Errorf("%w: customer_id is required", ports.ErrInvalidInput)
+	}
+	ownedFrom := calendarDate(date)
+	if ownedFrom.After(calendarDate(time.Now())) {
+		return fmt.Errorf("%w: date can't be in the future", ports.ErrInvalidInput)
+	}
+
+	err := v.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		vehicle, err := v.repository.GetByIDForUpdate(ctx, vehicleID)
+		if err != nil {
+			return err
+		}
+		if vehicle.Status == constants.StatusScrapped {
+			return fmt.Errorf("%w: a scrapped vehicle can't be given an owner", ports.ErrInvalidState)
+		}
+		if err := v.vehicleCustomerRepository.AssignVehicleToCustomer(ctx, vehicleID, customerID, ownedFrom); err != nil {
+			if errors.Is(err, ports.ErrConflict) {
+				return fmt.Errorf("%w; use POST /transfer to change owners", err)
+			}
+			return err
+		}
+		return v.writeEvent(ctx, constants.OwnerAssigned, strconv.FormatInt(vehicleID, 10), events.OwnerAssigned{
+			EventID:    uuid.NewString(),
+			OccurredAt: time.Now().UTC(),
+			VehicleID:  vehicleID,
+			CustomerID: customerID,
+			OwnedFrom:  ownedFrom.Format(time.DateOnly),
+		})
+	})
+	if err != nil && !isClientError(err) {
+		logger.ErrorContext(ctx, "failed to assign initial owner", "vehicle", vehicleID, "customer", customerID, "error", err)
+	}
+	return err
 }
 
 // RegisterVehicle implements [ports.VehicleService]. The vehicle row and its

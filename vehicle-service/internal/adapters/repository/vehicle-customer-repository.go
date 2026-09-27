@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 	"vehicle-service/internal/adapters/database/models"
 	database_provider "vehicle-service/internal/adapters/database/provider"
@@ -10,6 +11,7 @@ import (
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
+	"vehicle-service/pkg/utils"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -22,21 +24,24 @@ type VehicleCustomerRepository struct {
 // AssignVehicleToCustomer implements [ports.VehicleCustomerRepository].
 func (c VehicleCustomerRepository) AssignVehicleToCustomer(ctx context.Context, vehicleID int64, customerID int64, date time.Time) error {
 	model := models.CustomerVehicle{
-		CustomerID: int64(customerID),
+		CustomerID: customerID,
 		VehicleID:  vehicleID,
-		// Vehicle:    models.Vehicle{},
-		OwnedFrom: date,
-		// OwnedTo:   time.Time{},
-		Status:    constants.OwnershipCurrent,
-		CreatedAt: date,
+		OwnedFrom:  date,
+		Status:     constants.OwnershipCurrent,
 	}
 
-	err := database_provider.DBFromContext(ctx, c.db).Create(&model).Error
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to assign vehicle to customer", "customerID", customerID, "vehicleID", vehicleID)
-		return err
+	// Omit the association, or GORM would try to upsert an empty vehicle.
+	err := database_provider.DBFromContext(ctx, c.db).Omit(clause.Associations).Create(&model).Error
+	switch {
+	case err == nil:
+		return nil
+	case utils.IsDuplicateKeyError(err) && utils.ConstraintName(err) == constants.ConstraintCurrentOwner:
+		return fmt.Errorf("%w: the vehicle already has a current owner", ports.ErrConflict)
+	case utils.IsForeignKeyError(err):
+		return ports.ErrNotFound
 	}
-	return nil
+	logger.ErrorContext(ctx, "failed to assign vehicle to customer", "customerID", customerID, "vehicleID", vehicleID, "error", err)
+	return err
 }
 
 // GetCustomerVehicle implements [ports.VehicleCustomerRepository].

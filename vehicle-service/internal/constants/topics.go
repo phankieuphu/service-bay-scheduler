@@ -7,4 +7,5 @@ const (
 	// correctly (architecture-design.md §3).
 	WarrantyChanged = "vehicle.vehicle.warranty-changed.v1"
 	TransferVehicle = "vehicle.vehicle-customer.transfer.v1"
+	OwnerAssigned   = "vehicle.vehicle-customer.assigned.v1"
 )

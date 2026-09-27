@@ -39,3 +39,14 @@ type WarrantyChanged struct {
 	PreviousWarrantyEndDate *string   `json:"previous_warranty_end_date"`
 	WarrantyEndDate         *string   `json:"warranty_end_date"`
 }
+
+// OwnerAssigned is published on constants.OwnerAssigned when a vehicle gets
+// its first owner. Later ownership changes are published on
+// constants.TransferVehicle.
+type OwnerAssigned struct {
+	EventID    string    `json:"event_id"`
+	OccurredAt time.Time `json:"occurred_at"`
+	VehicleID  int64     `json:"vehicle_id"`
+	CustomerID int64     `json:"customer_id"`
+	OwnedFrom  string    `json:"owned_from"`
+}
