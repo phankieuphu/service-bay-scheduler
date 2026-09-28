@@ -59,66 +59,74 @@ export function SignUpForm() {
   }
 
   return (
-    <form className="form-grid" onSubmit={handleSubmit}>
-      <label htmlFor="sign-up-email">Email</label>
-      <input
-        id="sign-up-email"
-        type="email"
-        autoComplete="username"
-        maxLength={255}
-        value={form.email}
-        onChange={(e) => updateField('email', e.target.value)}
-        required
-      />
+    <form className="stack" onSubmit={handleSubmit}>
+      <label className="field" htmlFor="sign-up-email">
+        Email
+        <input
+          id="sign-up-email"
+          type="email"
+          autoComplete="username"
+          placeholder="you@example.com"
+          maxLength={255}
+          value={form.email}
+          onChange={(e) => updateField('email', e.target.value)}
+          required
+        />
+      </label>
 
-      <label htmlFor="sign-up-password">Password</label>
-      <input
-        id="sign-up-password"
-        type="password"
-        autoComplete="new-password"
-        minLength={PASSWORD_MIN_LENGTH}
-        value={form.password}
-        onChange={(e) => updateField('password', e.target.value)}
-        aria-describedby="sign-up-password-hint"
-        required
-      />
-      <span id="sign-up-password-hint" className="hint span-2 full">
-        At least {PASSWORD_MIN_LENGTH} characters.
-      </span>
+      <label className="field" htmlFor="sign-up-password">
+        Password
+        <input
+          id="sign-up-password"
+          type="password"
+          autoComplete="new-password"
+          minLength={PASSWORD_MIN_LENGTH}
+          value={form.password}
+          onChange={(e) => updateField('password', e.target.value)}
+          aria-describedby="sign-up-password-hint"
+          required
+        />
+        <span id="sign-up-password-hint" className="hint">
+          At least {PASSWORD_MIN_LENGTH} characters.
+        </span>
+      </label>
 
-      <label htmlFor="sign-up-confirm">Confirm password</label>
-      <input
-        id="sign-up-confirm"
-        type="password"
-        autoComplete="new-password"
-        value={form.confirmPassword}
-        onChange={(e) => updateField('confirmPassword', e.target.value)}
-        required
-      />
+      <label className="field" htmlFor="sign-up-confirm">
+        Confirm password
+        <input
+          id="sign-up-confirm"
+          type="password"
+          autoComplete="new-password"
+          value={form.confirmPassword}
+          onChange={(e) => updateField('confirmPassword', e.target.value)}
+          required
+        />
+      </label>
 
-      <span className="label" id="sign-up-role-label">
-        I am a
-      </span>
-      <div className="segmented" role="radiogroup" aria-labelledby="sign-up-role-label">
-        {roles.map((role) => (
-          <label key={role.id} className={form.role === role.id ? 'active' : ''}>
-            <input
-              type="radio"
-              name="role"
-              value={role.id}
-              checked={form.role === role.id}
-              onChange={() => updateField('role', role.id)}
-            />
-            {role.label}
-          </label>
-        ))}
+      <div className="field">
+        <span id="sign-up-role-label">I am a</span>
+        <div className="segmented" role="radiogroup" aria-labelledby="sign-up-role-label">
+          {roles.map((role) => (
+            <label key={role.id} className={form.role === role.id ? 'active' : ''}>
+              <input
+                type="radio"
+                name="role"
+                value={role.id}
+                checked={form.role === role.id}
+                onChange={() => updateField('role', role.id)}
+              />
+              {role.label}
+            </label>
+          ))}
+        </div>
       </div>
+      <p className="hint flush">Dealership managers and admins are added by an administrator.</p>
 
-      <button type="submit" disabled={loading} className="span-2">
+      {error && <p className="message error flush">{error}</p>}
+
+      <button type="submit" disabled={loading} className="align-start">
         {loading ? 'Creating account…' : 'Create account'}
       </button>
-
-      {error && <p className="message error span-2 full">{error}</p>}
     </form>
   )
 }

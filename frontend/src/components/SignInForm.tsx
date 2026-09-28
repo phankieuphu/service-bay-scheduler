@@ -24,32 +24,36 @@ export function SignInForm() {
   }
 
   return (
-    <form className="form-grid" onSubmit={handleSubmit}>
-      <label htmlFor="sign-in-email">Email</label>
-      <input
-        id="sign-in-email"
-        type="email"
-        autoComplete="username"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-      />
+    <form className="stack" onSubmit={handleSubmit}>
+      <label className="field" htmlFor="sign-in-email">
+        Email
+        <input
+          id="sign-in-email"
+          type="email"
+          autoComplete="username"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+      </label>
 
-      <label htmlFor="sign-in-password">Password</label>
-      <input
-        id="sign-in-password"
-        type="password"
-        autoComplete="current-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-      />
+      <label className="field" htmlFor="sign-in-password">
+        Password
+        <input
+          id="sign-in-password"
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+      </label>
 
-      <button type="submit" disabled={loading} className="span-2">
+      {error && <p className="message error flush">{error}</p>}
+
+      <button type="submit" disabled={loading} className="align-start">
         {loading ? 'Signing in…' : 'Sign in'}
       </button>
-
-      {error && <p className="message error span-2 full">{error}</p>}
     </form>
   )
 }
