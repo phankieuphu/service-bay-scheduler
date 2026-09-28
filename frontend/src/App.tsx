@@ -3,70 +3,51 @@ import type { User } from './api/identity'
 import { useAuth } from './auth/auth-context'
 import { AccountPanel } from './components/AccountPanel'
 import { AuthScreen } from './components/AuthScreen'
-import { CreateCustomer } from './components/CreateCustomer'
-import { CustomerList } from './components/CustomerList'
-import { GetVehicle } from './components/GetVehicle'
+import { Brand } from './components/Brand'
+import { CustomersPage } from './components/CustomersPage'
 import { Tabs } from './components/Tabs'
-import { TransferVehicle } from './components/TransferVehicle'
 import { UserMenu } from './components/UserMenu'
+import { VehiclesPage } from './components/VehiclesPage'
 import './App.css'
 
 type Section = 'customers' | 'vehicles' | 'account'
-type CustomerTab = 'list' | 'create'
-type VehicleTab = 'get' | 'transfer'
 
 function Workspace({ user }: { user: User }) {
   const [section, setSection] = useState<Section>('customers')
-  const [customerTab, setCustomerTab] = useState<CustomerTab>('list')
-  const [vehicleTab, setVehicleTab] = useState<VehicleTab>('get')
+  // Set when another section links to a vehicle ("Open" on a customer's
+  // vehicle list); VehiclesPage opens it on mount.
+  const [vehicleToOpen, setVehicleToOpen] = useState<number | null>(null)
+
+  function openVehicle(vehicleId: number) {
+    setVehicleToOpen(vehicleId)
+    setSection('vehicles')
+  }
 
   return (
     <>
-      <header>
+      <header className="app-header">
         <div className="header-bar">
-          <h1>Service Bay</h1>
+          <Brand as="h1" />
           <UserMenu user={user} />
         </div>
         <Tabs
+          label="Sections"
           tabs={[
             { id: 'customers', label: 'Customers' },
             { id: 'vehicles', label: 'Vehicles' },
             { id: 'account', label: 'Account' },
           ]}
           active={section}
-          onChange={setSection}
+          onChange={(next) => {
+            setVehicleToOpen(null)
+            setSection(next)
+          }}
         />
       </header>
 
       <main>
-        {section === 'customers' && (
-          <>
-            <Tabs
-              className="subtabs"
-              tabs={[
-                { id: 'list', label: 'Browse' },
-                { id: 'create', label: 'Create' },
-              ]}
-              active={customerTab}
-              onChange={setCustomerTab}
-            />
-            {customerTab === 'list' ? <CustomerList /> : <CreateCustomer />}
-          </>
-        )}
-        {section === 'vehicles' && (
-          <>
-            <Tabs
-              className="subtabs"
-              tabs={[
-                { id: 'get', label: 'Get Vehicle' },
-                { id: 'transfer', label: 'Transfer Vehicle' },
-              ]}
-              active={vehicleTab}
-              onChange={setVehicleTab}
-            />
-            {vehicleTab === 'get' ? <GetVehicle /> : <TransferVehicle />}
-          </>
-        )}
+        {section === 'customers' && <CustomersPage onOpenVehicle={openVehicle} />}
+        {section === 'vehicles' && <VehiclesPage initialVehicleId={vehicleToOpen} />}
         {section === 'account' && <AccountPanel user={user} />}
       </main>
     </>
@@ -86,9 +67,10 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <header>
-        <h1>Service Bay</h1>
+    <div className="app auth">
+      <header className="auth-header">
+        <Brand as="h1" />
+        <p className="muted">Book, track and pay for vehicle service across every hub.</p>
       </header>
       <main>
         {state.status === 'loading' && <p className="muted">Restoring your session…</p>}

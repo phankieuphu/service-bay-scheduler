@@ -9,36 +9,24 @@ const roleLabels: Record<User['role'], string> = {
 
 export function AccountPanel({ user }: { user: User }) {
   return (
-    <div className="panel">
-      <h2>Account</h2>
-      <table className="details">
-        <tbody>
-          <tr>
-            <th>Email</th>
-            <td>{user.email}</td>
-          </tr>
-          <tr>
-            <th>Role</th>
-            <td>{roleLabels[user.role]}</td>
-          </tr>
-          <tr>
-            <th>Status</th>
-            <td>
-              <span className={`badge badge-${user.status.toLowerCase()}`}>{user.status}</span>
-            </td>
-          </tr>
-          <tr>
-            <th>User ID</th>
-            <td>
-              <code>{user.id}</code>
-            </td>
-          </tr>
-          <tr>
-            <th>Member since</th>
-            <td>{new Date(user.created_at).toLocaleString()}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <section className="panel narrow stack" aria-labelledby="account-heading">
+      <h2 id="account-heading">Account</h2>
+      <dl className="details">
+        <dt>Email</dt>
+        <dd>{user.email}</dd>
+        <dt>Role</dt>
+        <dd>{roleLabels[user.role]}</dd>
+        <dt>Status</dt>
+        <dd>
+          <span className={`badge badge-${user.status.toLowerCase()}`}>{user.status}</span>
+        </dd>
+        <dt>User ID</dt>
+        <dd>
+          <code>{user.id}</code>
+        </dd>
+        <dt>Member since</dt>
+        <dd>{new Date(user.created_at).toLocaleString()}</dd>
+      </dl>
+    </section>
   )
 }

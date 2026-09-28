@@ -8,16 +8,18 @@ import {
   updateCustomer,
   type Customer,
 } from '../api/customer'
+import { CustomerVehicles } from './CustomerVehicles'
 
 interface Props {
   customer: Customer
   onUpdated: (customer: Customer) => void
   onDeleted: (customerId: number) => void
+  onOpenVehicle: (vehicleId: number) => void
 }
 
 type Mode = 'view' | 'edit' | 'confirm-delete'
 
-export function CustomerDetail({ customer, onUpdated, onDeleted }: Props) {
+export function CustomerDetail({ customer, onUpdated, onDeleted, onOpenVehicle }: Props) {
   const [mode, setMode] = useState<Mode>('view')
   const [name, setName] = useState(customer.name)
   const [birthDay, setBirthDay] = useState(birthDayToInput(customer.birth_day))
@@ -110,11 +112,11 @@ export function CustomerDetail({ customer, onUpdated, onDeleted }: Props) {
   }
 
   return (
-    <div className="detail-card">
+    <section className="card stack" aria-labelledby="customer-detail-heading">
       <div className="detail-header">
-        <h3>
+        <h2 id="customer-detail-heading">
           {customer.name} <span className="muted">#{customer.id}</span>
-        </h3>
+        </h2>
         {mode === 'view' && (
           <div className="actions">
             <button type="button" className="secondary" onClick={startEdit}>
@@ -168,42 +170,26 @@ export function CustomerDetail({ customer, onUpdated, onDeleted }: Props) {
           </div>
         </form>
       ) : (
-        <table className="details">
-          <tbody>
-            <tr>
-              <th>Email</th>
-              <td>{customer.email}</td>
-            </tr>
-            <tr>
-              <th>Phone</th>
-              <td>{customer.phone || '—'}</td>
-            </tr>
-            <tr>
-              <th>Birthday</th>
-              <td>{birthDayToInput(customer.birth_day)}</td>
-            </tr>
-            <tr>
-              <th>Status</th>
-              <td>
-                <span className={`badge badge-${customer.status.toLowerCase()}`}>
-                  {customer.status}
-                </span>
-              </td>
-            </tr>
-            <tr>
-              <th>Created</th>
-              <td>{new Date(customer.created_at).toLocaleString()}</td>
-            </tr>
-            <tr>
-              <th>Updated</th>
-              <td>{new Date(customer.updated_at).toLocaleString()}</td>
-            </tr>
-          </tbody>
-        </table>
+        <dl className="details">
+          <dt>Email</dt>
+          <dd>{customer.email}</dd>
+          <dt>Phone</dt>
+          <dd>{customer.phone || '—'}</dd>
+          <dt>Birthday</dt>
+          <dd>{birthDayToInput(customer.birth_day)}</dd>
+          <dt>Status</dt>
+          <dd>
+            <span className={`badge badge-${customer.status.toLowerCase()}`}>
+              {customer.status}
+            </span>
+          </dd>
+          <dt>Updated</dt>
+          <dd>{new Date(customer.updated_at).toLocaleString()}</dd>
+        </dl>
       )}
 
       {mode === 'confirm-delete' && (
-        <div className="message error confirm">
+        <div className="message error confirm flush">
           <span>
             Delete {customer.name}? They will no longer appear in listings or
             lookups.
@@ -229,8 +215,10 @@ export function CustomerDetail({ customer, onUpdated, onDeleted }: Props) {
         </div>
       )}
 
-      {error && <p className="message error">{error}</p>}
-      {success && <p className="message success">{success}</p>}
-    </div>
+      {error && <p className="message error flush">{error}</p>}
+      {success && <p className="message success flush">{success}</p>}
+
+      <CustomerVehicles customerId={customer.id} onOpenVehicle={onOpenVehicle} />
+    </section>
   )
 }

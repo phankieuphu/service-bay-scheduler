@@ -12,7 +12,7 @@ export function AuthScreen() {
   const notice = state.status === 'signed-out' ? state.notice : undefined
 
   return (
-    <div className="panel auth-panel">
+    <div className="panel auth-panel stack">
       <Tabs
         className="subtabs"
         tabs={[
