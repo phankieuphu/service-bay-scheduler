@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/IBM/sarama v1.61.1
 	github.com/gin-gonic/gin v1.12.0
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/shopspring/decimal v1.4.0
