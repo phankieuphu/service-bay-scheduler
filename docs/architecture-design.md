@@ -11,7 +11,7 @@ Most of this document is the **target** design. §0 says how much of it is built
 | Part of the design | Status |
 |---|---|
 | identity-service | Built: register, login, refresh, logout, `GET /me`. Publishes `UserCreated` (§3a). |
-| customer-service | Built: customer CRUD, cursor pagination, optimistic locking, soft delete. Publishes §3c events. Consumes `identity.user-events` but only logs them for now. |
+| customer-service | Built: customer CRUD, cursor pagination, optimistic locking, soft delete. Publishes the §3c events. Consumes `identity.user-events` but only logs them for now. |
 | vehicle-service | Built: registry, owner assign/transfer, warranty, installed materials, service history. Produces and consumes the §3b events. Consumes `identity.user-events` but only logs them for now. |
 | dealership, scheduler, billing, notification, report services | Not built. Each has a database and schema in `postgres/init/` (`04`–`08`), and nothing else yet. |
 | API Gateway (§2, §7) | Not built. The web app (`frontend/`) calls each service directly, and the services allow any CORS origin. Only identity-service validates tokens (`GET /me`); customer-service and vehicle-service endpoints are unauthenticated. |
@@ -115,6 +115,8 @@ flowchart TB
 | `ShiftChanged` / `BayStatusChanged` / `TechnicianSkillUpdated` | dealership | scheduler | Keep scheduler's local capacity snapshot current |
 | `WarrantyChanged` | vehicle | billing | Correct fee calculation on the next bill |
 
+Every event, from every service, uses one envelope: `event_id` (UUID, for deduplication), `event_type`, `occurred_at`, and the payload under a key named after the entity (`user`, `customer`, `vehicle`). See §3a–§3c.
+
 Every service also writes an **outbox row** in the same transaction as its state change, with a relay process publishing it to Kafka — never call notification-service (or Kafka) synchronously from inside a write transaction.
 
 ### 3a. `identity.user-events` contract
@@ -165,27 +167,63 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 - `services` is copied into the history row as it was at completion time (§5c), so a later catalog rename doesn't rewrite history.
 - A message that can't be decoded, is missing required fields, or names an unknown vehicle is logged and skipped rather than retried.
 
-**Produced** (via the outbox; key = vehicle id; every payload has `event_id` and `occurred_at`; dates are `YYYY-MM-DD`):
+**Produced** (via the outbox; key = vehicle id; dates are `YYYY-MM-DD`). Every event uses the same envelope as §3a, with the payload under `vehicle`:
 
-| Topic | When | Payload (besides `event_id`, `occurred_at`) |
-|---|---|---|
-| `vehicle.vehicle.created.v1` | `POST /vehicle` | `vehicle_id`, `vin`, `license_plate`, `vehicle_model_id`, `warranty_end_date`, `status` |
-| `vehicle.vehicle.updated.v1` | `PATCH /vehicle/:id` changed something | `vehicle_id`, `status`, `warranty_end_date`, `updated_at` (state after the change) |
-| `vehicle.vehicle.warranty-changed.v1` | `PATCH` changed the warranty — **billing-service's input** | `vehicle_id`, `previous_warranty_end_date`, `warranty_end_date` |
-| `vehicle.vehicle-customer.assigned.v1` | `POST /vehicle/:id/owner` | `vehicle_id`, `customer_id`, `owned_from` |
-| `vehicle.vehicle-customer.transfer.v1` | `POST /transfer` | (pre-existing; untagged Go field names: `Date`, `From`, `To`, `VehicleID`) |
+```json
+{
+  "event_id": "5b0c8a4e-1f0e-4f55-9d7c-2a4b6f1e8c30",
+  "event_type": "VehicleCreated",
+  "occurred_at": "2026-09-29T10:00:00Z",
+  "vehicle": {
+    "id": 42,
+    "vin": "1HGCM82633A004352",
+    "license_plate": "51A12345",
+    "vehicle_model_id": 1,
+    "warranty_end_date": "2030-07-11",
+    "status": "ACTIVE",
+    "created_at": "2026-09-29T10:00:00Z",
+    "updated_at": "2026-09-29T10:00:00Z"
+  }
+}
+```
+
+| Topic | `event_type` | When | `vehicle` payload |
+|---|---|---|---|
+| `vehicle.vehicle.created.v1` | `VehicleCreated` | `POST /vehicle` | `id`, `vin`, `license_plate` (omitted if none), `vehicle_model_id`, `warranty_end_date` (`null` if none), `status`, `created_at`, `updated_at` |
+| `vehicle.vehicle.updated.v1` | `VehicleUpdated` | `PATCH /vehicle/:id` changed something | same as `VehicleCreated`, the state after the change |
+| `vehicle.vehicle.warranty-changed.v1` | `WarrantyChanged` | `PATCH` changed the warranty — **billing-service's input** | `id`, `previous_warranty_end_date`, `warranty_end_date` |
+| `vehicle.vehicle-customer.assigned.v1` | `OwnerAssigned` | `POST /vehicle/:id/owner` | `id`, `customer_id`, `owned_from` |
+| `vehicle.vehicle-customer.transfer.v1` | `VehicleTransferred` | `POST /transfer` | `id`, `customer_id` (new owner), `previous_customer_id`, `owned_from` |
 
 ### 3c. customer-service event contracts
 
-**Produced** (via the outbox; key = customer id). The topic names come from `customer-service/internal/constants/topics.go`; the `KAFKA_PRODUCER_TOPIC` setting is not used for them.
+**Produced** (via the outbox; key = customer id). The topic names come from `customer-service/internal/constants/topics.go`; the `KAFKA_PRODUCER_TOPIC` setting is not used for them. Every event uses the same envelope as §3a, with the payload under `customer`. Timestamps are UTC with millisecond precision; `birth_day` is `YYYY-MM-DD`.
 
-| Topic | When | Payload |
-|---|---|---|
-| `customer.account.created.v1` | `POST /customer` | The customer entity, serialized without JSON tags: `ID`, `Name`, `Email`, `Phone`, `BirthDay`, `Status`, `CreatedAt`, `UpdatedAt` |
-| `customer.account.updated.v1` | `PUT /customer/:id` | `id`, `name` (omitted if unchanged), `birth_day` (`YYYY-MM-DD`, omitted if unchanged), `updated_at` |
-| `customer.account.deleted.v1` | `DELETE /customer/:id` (soft delete) | `id`, `deleted_at` |
+```json
+{
+  "event_id": "c2d7f0a1-6b3e-4d8a-9e21-7f5c3b9a0d44",
+  "event_type": "CustomerCreated",
+  "occurred_at": "2026-09-29T10:00:00.000Z",
+  "customer": {
+    "id": 7,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "0901234567",
+    "birth_day": "1990-05-17",
+    "status": "ACTIVE",
+    "created_at": "2026-09-29T10:00:00.000Z",
+    "updated_at": "2026-09-29T10:00:00.000Z"
+  }
+}
+```
 
-Unlike §3a and §3b, these payloads carry no `event_id` or `occurred_at`, and `created.v1` uses Go field names. A consumer should upsert by customer id. Adding `event_id` and snake_case fields before anything consumes these topics would bring them in line with the other contracts.
+| Topic | `event_type` | When | `customer` payload |
+|---|---|---|---|
+| `customer.account.created.v1` | `CustomerCreated` | `POST /customer` | `id`, `name`, `email`, `phone` (omitted if empty), `birth_day`, `status`, `created_at`, `updated_at` |
+| `customer.account.updated.v1` | `CustomerUpdated` | `PUT /customer/:id` | same as `CustomerCreated`, the full state after the change |
+| `customer.account.deleted.v1` | `CustomerDeleted` | `DELETE /customer/:id` (soft delete) | `id`, `deleted_at` |
+
+Nothing consumes these topics yet. A consumer should dedupe on `event_id` or upsert by `customer.id`.
 
 ---
 
