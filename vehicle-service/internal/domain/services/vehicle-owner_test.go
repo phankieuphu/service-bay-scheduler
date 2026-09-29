@@ -54,9 +54,10 @@ func TestVehicleService_AssignInitialOwner(t *testing.T) {
 		if len(*rows) != 1 || (*rows)[0].Topic != constants.OwnerAssigned || (*rows)[0].Key != "3" {
 			t.Fatalf("outbox = %+v", *rows)
 		}
-		var event events.OwnerAssigned
+		var event events.VehicleEvent[events.Ownership]
 		_ = json.Unmarshal((*rows)[0].Payload, &event)
-		if event.VehicleID != 3 || event.CustomerID != 77 || event.OwnedFrom != "2026-03-04" || event.EventID == "" {
+		if event.EventID == "" || event.EventType != events.OwnerAssigned || event.OccurredAt.IsZero() ||
+			event.Vehicle.ID != 3 || event.Vehicle.CustomerID != 77 || event.Vehicle.OwnedFrom != "2026-03-04" || event.Vehicle.PreviousCustomerID != nil {
 			t.Errorf("event = %+v", event)
 		}
 	})

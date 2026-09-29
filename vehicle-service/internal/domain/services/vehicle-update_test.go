@@ -68,11 +68,19 @@ func TestVehicleService_UpdateVehicle(t *testing.T) {
 		if _, ok := h.events[constants.VehicleUpdate]; !ok {
 			t.Error("no VehicleUpdated event")
 		}
-		var wc events.WarrantyChanged
+		var updatedEvent events.VehicleEvent[events.VehicleState]
+		if err := json.Unmarshal(h.events[constants.VehicleUpdate], &updatedEvent); err != nil {
+			t.Fatalf("VehicleUpdated: %v", err)
+		}
+		if updatedEvent.EventType != events.VehicleUpdated || updatedEvent.Vehicle.ID != 5 || *updatedEvent.Vehicle.WarrantyEndDate != "2029-06-30" {
+			t.Errorf("unexpected VehicleUpdated %+v", updatedEvent)
+		}
+		var wc events.VehicleEvent[events.WarrantyChange]
 		if err := json.Unmarshal(h.events[constants.WarrantyChanged], &wc); err != nil {
 			t.Fatalf("WarrantyChanged: %v", err)
 		}
-		if wc.VehicleID != 5 || *wc.PreviousWarrantyEndDate != "2027-01-31" || *wc.WarrantyEndDate != "2029-06-30" || wc.EventID == "" {
+		if wc.EventID == "" || wc.EventType != events.WarrantyChanged || wc.Vehicle.ID != 5 ||
+			*wc.Vehicle.PreviousWarrantyEndDate != "2027-01-31" || *wc.Vehicle.WarrantyEndDate != "2029-06-30" {
 			t.Errorf("unexpected WarrantyChanged %+v", wc)
 		}
 	})

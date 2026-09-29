@@ -207,17 +207,26 @@ func TestCustomer_DeleteCustomer(t *testing.T) {
 			}
 
 			var event struct {
-				ID        int64  `json:"id"`
-				DeletedAt string `json:"deleted_at"`
+				EventID    string `json:"event_id"`
+				EventType  string `json:"event_type"`
+				OccurredAt string `json:"occurred_at"`
+				Customer   struct {
+					ID        int64  `json:"id"`
+					DeletedAt string `json:"deleted_at"`
+				} `json:"customer"`
 			}
 			if err := json.Unmarshal(msg.Payload, &event); err != nil {
 				t.Fatalf("payload is not valid JSON: %v", err)
 			}
-			if event.ID != 42 {
-				t.Fatalf("expected id 42, got %d", event.ID)
+			if event.EventID == "" || event.EventType != "CustomerDeleted" || event.OccurredAt == "" {
+				t.Fatalf("unexpected envelope: %s", msg.Payload)
 			}
-			if _, err := time.Parse(times.WireLayout, event.DeletedAt); err != nil || !strings.HasSuffix(event.DeletedAt, "Z") || len(event.DeletedAt) != len("2006-01-02T15:04:05.000Z") {
-				t.Fatalf("deleted_at %q is not UTC millisecond format", event.DeletedAt)
+			if event.Customer.ID != 42 {
+				t.Fatalf("expected id 42, got %d", event.Customer.ID)
+			}
+			deletedAt := event.Customer.DeletedAt
+			if _, err := time.Parse(times.WireLayout, deletedAt); err != nil || !strings.HasSuffix(deletedAt, "Z") || len(deletedAt) != len("2006-01-02T15:04:05.000Z") {
+				t.Fatalf("deleted_at %q is not UTC millisecond format", deletedAt)
 			}
 		})
 	}
@@ -288,6 +297,16 @@ func TestCustomer_UpdateCustomer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &MockCustomerRepository{
 				UpdateFunc: tt.updateCustomerFunc,
+				GetByIDFunc: func(ctx context.Context, id int64) (entity.Customer, error) {
+					return entity.Customer{
+						ID:        id,
+						Name:      tt.updateCustomer.Name,
+						Email:     "lion@example.com",
+						BirthDay:  tt.updateCustomer.BirthDay,
+						Status:    constants.StatusActive,
+						UpdatedAt: time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC),
+					}, nil
+				},
 			}
 			txManage := &MockTxMangerRepository{
 				RunInTxFunc: func(ctx context.Context, fn func(ctx context.Context) error) error {
@@ -323,11 +342,21 @@ func TestCustomer_UpdateCustomer(t *testing.T) {
 			if msg.Topic != constants.CustomerUpdate || msg.Key != "99" {
 				t.Fatalf("unexpected topic/key: %q/%q", msg.Topic, msg.Key)
 			}
-			var event map[string]any
+			var event struct {
+				EventID    string         `json:"event_id"`
+				EventType  string         `json:"event_type"`
+				OccurredAt string         `json:"occurred_at"`
+				Customer   map[string]any `json:"customer"`
+			}
 			if err := json.Unmarshal(msg.Payload, &event); err != nil {
 				t.Fatalf("payload is not valid JSON: %v", err)
 			}
-			if event["id"] != float64(99) || event["name"] != "Lion" || event["birth_day"] != "2020-09-24" {
+			if event.EventID == "" || event.EventType != "CustomerUpdated" || event.OccurredAt != "2026-09-29T10:00:00.000Z" {
+				t.Fatalf("unexpected envelope: %s", msg.Payload)
+			}
+			c := event.Customer
+			if c["id"] != float64(99) || c["name"] != "Lion" || c["birth_day"] != "2020-09-24" ||
+				c["email"] != "lion@example.com" || c["status"] != "ACTIVE" || c["updated_at"] != "2026-09-29T10:00:00.000Z" {
 				t.Fatalf("unexpected event payload: %s", msg.Payload)
 			}
 		})
