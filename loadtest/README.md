@@ -13,8 +13,9 @@ loadtest/
 ├── seed/seed.sh        seed / reset / clean the load-test data (psql)
 ├── lib/common.sh       tiers, mix, SLO, shared helpers
 ├── lib/engine.sh       curl arrival-rate engine + report (sh runners)
+├── lib/k8s.sh          cluster preflight (Pending pods, metrics-server)
 ├── sh/                 smoke, baseline, load, stress, spike, soak
-├── k6/                 the same scenarios in k6 + run.sh wrapper
+├── k6/                 the same scenarios in k6 + run.sh / in-cluster.sh wrappers
 │   └── lib/            config, API calls, mix, phase tagging, /metrics probe, summary
 └── results/            one folder / file per run (git-ignored)
 ```
@@ -89,16 +90,45 @@ Before each load run, the runners call `seed/seed.sh reset` to give the whole po
 
 ## Running against Kubernetes
 
-Deploy the cluster sized for the tier you are testing first: `kubectl apply -k k8s/overlays/tier-100k` (see [k8s/README.md](../k8s/README.md#load-test-tiers-issue-38)).
+1. **Size the cluster for the tier.** Each overlay's "Suggested nodes" in [k8s/README.md](../k8s/README.md#load-test-tiers-issue-38) is the minimum. tier-100k needs 3 × (4 vCPU, 8 GiB); on Docker Desktop that means at least 12 GiB of memory under Settings → Resources. Otherwise some pods stay Pending and the run measures a smaller deployment than the tier describes. On a single small node, stick to tier-1k.
+2. **Install metrics-server once per cluster:** `kubectl apply -k k8s/addons/metrics-server`. Without it the HPAs show `<unknown>` and never scale.
+3. **Deploy the tier into a fresh namespace**, so disk sizes and StatefulSet settings come from the overlay: `kubectl delete -k k8s/` (this **deletes the data**), then `kubectl apply -k k8s/overlays/tier-1k`.
+4. **Seed**, then check that nothing is Pending or not Ready:
+
+   ```bash
+   PSQL="kubectl -n service-bay exec -i postgres-0 -c postgres -- psql -U postgres" ./seed/seed.sh
+   ./k6/in-cluster.sh check          # or: make k8s-check
+   ```
+
+5. **Run k6 inside the cluster:**
+
+   ```bash
+   TIER=1k ./k6/in-cluster.sh load     # tier-1k baseline: 10 ops/s, SLO judged on the 30 min hold
+   TIER=1k ./k6/in-cluster.sh stress   # steps up to 50 ops/s; the report gives the break point
+   make k8s-load TIER=1k               # same through make; root: make loadtest TOOL=k8s SCENARIO=load
+   ```
+
+`in-cluster.sh` takes the same scenarios, env vars and extra k6 args as `run.sh`. It:
+
+- runs the preflight and refuses to start if any pod is Pending or not Ready (`ALLOW_PENDING=1` overrides this, but then the numbers don't describe the tier). It warns if metrics-server is missing.
+- resets the transfer pool through `kubectl exec` into `postgres-0`.
+- ships `k6/*.js` in the `loadtest-k6` ConfigMap and starts a `grafana/k6` pod. The pod targets the Services by cluster DNS and prefers a node without customer-service, vehicle-service or postgres pods. Set `K6_NODE=<node>` to pin it to one node.
+- streams the k6 output, copies the summary files into `results/`, deletes the pod, and exits with k6's exit code.
+
+Options: `K8S_NAMESPACE`, `K6_IMAGE` (default `grafana/k6:2.3.0`), `K6_CPU` / `K6_MEMORY` (default 250m / 256Mi request, no CPU limit), `KEEP_POD=1`. The pod downloads `k6-summary` from jslib.k6.io, so the cluster needs outbound internet access.
+
+**While it runs,** open Grafana (NodePort 30030) → **PostgreSQL → Saturation (load tests)**:
+
+- **Postgres CPU vs limit** and **CPU throttling by container** come from cAdvisor. A flat line at the limit, or throttling that stays above ~25%, means Postgres is CPU-bound for the tier.
+- **DB pool wait per pod** and **connections in use** come from each service's `go_sql_*` metrics. Wait above zero means requests queue for a connection (`DB_MAX_OPEN_CONNS`), not for Postgres.
+
+`./k6/run.sh` through `kubectl port-forward` still works. It sends all traffic through one tunnel to one pod, and the tunnel's own overhead ends up in the latencies, so only use it for smoke runs:
 
 ```bash
 kubectl -n service-bay port-forward svc/customer-service 8080:8080 &
 kubectl -n service-bay port-forward svc/vehicle-service 8081:8081 &
-PSQL="kubectl -n service-bay exec -i postgres-0 -- psql -U postgres" ./seed/seed.sh
-PSQL="kubectl -n service-bay exec -i postgres-0 -- psql -U postgres" TIER=100k ./k6/run.sh load
+./k6/run.sh smoke
 ```
-
-`kubectl port-forward` goes through a single pod and adds its own overhead, so use it only for smoke runs and low tiers. For real numbers, run k6 inside the cluster (`CUSTOMER_URL=http://customer-service:8080`, `VEHICLE_URL=http://vehicle-service:8081`) on a node that isn't running the services.
 
 ## Reading the results
 

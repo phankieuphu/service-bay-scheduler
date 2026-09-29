@@ -826,6 +826,211 @@
         "x": 0,
         "y": 41
       }
+    },
+    {
+      "type": "row",
+      "title": "Saturation (load tests)",
+      "collapsed": false,
+      "panels": [],
+      "id": 20,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Postgres CPU vs limit",
+      "description": "CPU cores the postgres container uses vs its limit (cAdvisor, Kubernetes only). Flat at the limit = Postgres is CPU-bound.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"service-bay\",container=\"postgres\"}[1m]))",
+          "legendFormat": "used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(container_spec_cpu_quota{namespace=\"service-bay\",container=\"postgres\"} / container_spec_cpu_period{namespace=\"service-bay\",container=\"postgres\"})",
+          "legendFormat": "limit",
+          "refId": "B"
+        }
+      ],
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU throttling by container",
+      "description": "Share of CFS periods in which the container hit its CPU limit (cAdvisor, Kubernetes only). Sustained > 25% on postgres adds latency to every query.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (container) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"service-bay\",container!=\"\"}[1m])) / sum by (container) (rate(container_cpu_cfs_periods_total{namespace=\"service-bay\",container!=\"\"}[1m]))",
+          "legendFormat": "{{container}}",
+          "refId": "A"
+        }
+      ],
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "DB pool wait per pod",
+      "description": "Seconds per second that requests spend waiting for a free connection in each service's database/sql pool (go_sql_wait_duration_seconds_total). Above 0 = DB_MAX_OPEN_CONNS is exhausted.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (job, kubernetes_pod_name) (rate(go_sql_wait_duration_seconds_total[1m]))",
+          "legendFormat": "{{job}} {{kubernetes_pod_name}}",
+          "refId": "A"
+        }
+      ],
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 58
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "DB pool connections in use per pod",
+      "description": "Connections checked out of each pod's pool vs its DB_MAX_OPEN_CONNS.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (job, kubernetes_pod_name) (go_sql_in_use_connections)",
+          "legendFormat": "{{job}} {{kubernetes_pod_name}} in use",
+          "refId": "A"
+        },
+        {
+          "expr": "max(go_sql_max_open_connections)",
+          "legendFormat": "max open (per pod)",
+          "refId": "B"
+        }
+      ],
+      "id": 24,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 58
+      }
     }
   ]
 }

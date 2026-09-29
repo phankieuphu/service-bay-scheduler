@@ -1,5 +1,5 @@
 # Read-only pod discovery for prometheus' kubernetes-pods job, scoped to this
-# namespace (a Role, not a ClusterRole).
+# namespace (a Role). The ClusterRole at the bottom is only for cAdvisor.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -25,6 +25,31 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: service-bay
+---
+# The kubernetes-cadvisor job reads container CPU/memory/throttling from each
+# kubelet through the API server proxy. Nodes are cluster-scoped, so this one
+# needs a ClusterRole; it grants read-only node access and nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: service-bay-prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: service-bay-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: service-bay-prometheus
 subjects:
   - kind: ServiceAccount
     name: prometheus

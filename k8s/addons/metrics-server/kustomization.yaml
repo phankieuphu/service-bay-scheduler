@@ -1,0 +1,25 @@
+# metrics-server, which the customer-/vehicle-service HPAs need to read pod
+# CPU. Without it `kubectl get hpa` shows `<unknown>` targets and the HPAs
+# never scale. It is cluster-wide (kube-system), so it is not part of the
+# service-bay base or the tier overlays. Install it once per cluster:
+#
+#   kubectl apply -k k8s/addons/metrics-server
+#   kubectl top pods -n service-bay        # works after ~1 min
+#
+# Skip this on clusters that ship it already (GKE, EKS add-on, AKS,
+# `minikube addons enable metrics-server`).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
+
+# Docker Desktop and kind kubelets serve self-signed certs that aren't signed
+# by the cluster CA, so metrics-server can't verify them. Don't use this flag
+# on a shared or production cluster.
+patches:
+  - target: { kind: Deployment, name: metrics-server, namespace: kube-system }
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubelet-insecure-tls

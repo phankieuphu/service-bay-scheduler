@@ -53,3 +53,33 @@ data:
             target_label: kubernetes_namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: kubernetes_pod_name
+
+      # Per-container CPU, memory and CFS throttling from every kubelet's
+      # cAdvisor, fetched through the API server proxy (no kubelet port or
+      # cert needed). Kept to this namespace to bound cardinality. Needs the
+      # ClusterRole in rbac.yaml. Used by the PostgreSQL dashboard's
+      # Saturation row (Postgres CPU vs limit, throttling by container).
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+        metric_relabel_configs:
+          - source_labels: [namespace]
+            action: keep
+            regex: service-bay
+          - source_labels: [__name__]
+            action: keep
+            regex: container_(cpu_usage_seconds_total|cpu_cfs_periods_total|cpu_cfs_throttled_periods_total|cpu_cfs_throttled_seconds_total|spec_cpu_quota|spec_cpu_period|memory_working_set_bytes|spec_memory_limit_bytes)

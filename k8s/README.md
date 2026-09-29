@@ -55,6 +55,15 @@ Sizing rules used everywhere (from the issue):
 - **JVM heaps follow the limit:** `KAFKA_HEAP_OPTS` is about 50% of the limit. Flink's `*.memory.process.size` equals the container limit. The images' default heaps would get OOM-killed inside these limits.
 - **DB connection budget:** services × HPA max × `DB_MAX_OPEN_CONNS` must stay under 80% of `max_connections` (100). tier-1m exceeds that (240), so it adds PgBouncer in transaction mode, which uses at most 48 Postgres connections. `max_prepared_statements` is set because GORM uses `PrepareStmt: true`.
 
+**metrics-server** is required for the HPAs to scale. Without it `kubectl get hpa` shows `<unknown>`. It is cluster-wide, so it isn't part of the overlays. Install it once per cluster:
+
+```sh
+kubectl apply -k k8s/addons/metrics-server   # v0.9.0 with --kubelet-insecure-tls for Docker Desktop / kind
+kubectl -n service-bay get hpa               # TARGETS shows a CPU % after ~1 min
+```
+
+**Before a load test,** run `loadtest/k6/in-cluster.sh check`. It fails if any pod is Pending, which means the tier doesn't fit the nodes, and warns if metrics-server is missing. A single Docker Desktop node fits tier-1k. tier-100k needs about 12 GiB of memory for Docker Desktop or the suggested 3 nodes. Run k6 from inside the cluster (`loadtest/k6/in-cluster.sh`), not through `kubectl port-forward`; see [loadtest/README.md](../loadtest/README.md#running-against-kubernetes).
+
 **Switching tiers on an existing cluster:** CPU, memory, replicas and config change in place. Disk sizes do not: a StatefulSet's `volumeClaimTemplates` is immutable, and the `local-path` storage class (Docker Desktop, kind) can't grow a PVC, so `apply` reports those two objects as forbidden.
 
 - **Postgres StatefulSet error: don't ignore it.** The API server rejects the whole patch, so the tier's Postgres `args` and resources don't get applied either. To fix it, delete only the StatefulSet object. Its pod and PVC (and your data) stay. Then apply again:
@@ -72,7 +81,7 @@ Sizing rules used everywhere (from the issue):
 
 - **Postgres read replica and Redis replica:** the services have no read/replica routing, so an extra instance would sit idle.
 - **3-broker Kafka and 3-node ZooKeeper:** this needs Kafka turned into a StatefulSet with per-broker IDs and listeners, plus a move to KRaft. Kafka also has no persistent volume yet.
-- **Monitoring add-ons:** Alertmanager, kube-state-metrics, metrics-server and the exporters belong to separate PRs in the issue's plan. metrics-server is required for the HPAs to act; without it `kubectl get hpa` shows `<unknown>`.
+- **Monitoring add-ons:** Alertmanager and kube-state-metrics belong to separate PRs in the issue's plan.
 
 ## Access
 
