@@ -24,6 +24,8 @@ Known gaps:
 
 - vehicle-service and customer-service log `identity.user-events` but don't create local profiles from them yet.
 - The frontend calls the services directly (CORS is open, `*`); there is no API gateway.
+- Only identity-service checks tokens (`GET /me`). customer-service and vehicle-service endpoints are unauthenticated.
+- customer-service and vehicle-service use `BIGINT` ids, not the UUIDs the architecture calls for (see [architecture-design.md §0](docs/architecture-design.md)).
 - The service Dockerfiles build `GOARCH=amd64` binaries (see [Troubleshooting](#troubleshooting) for Apple Silicon).
 
 ---
@@ -31,8 +33,8 @@ Known gaps:
 ## Documentation
 
 * [Business Requirement](docs/business-requirement.md)
-* [Architecture Design](docs/architecture-design.md): service map, event contracts, data ownership
-* [Technical Requirement](docs/technical-requirement.md)
+* [Architecture Design](docs/architecture-design.md): service map, event contracts, data ownership, and what's built so far (§0)
+* [Technical Requirement](docs/technical-requirement.md): scale and HA targets, and today's stack (§1a)
 * [Responsibility Planning](docs/responsibility-planning.md)
 * Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
@@ -186,9 +188,11 @@ Each service is its own Go module (there is no `go.work`), so always `cd` into i
 |----------|------------------|------------------|-----------------|
 | `API_PORT` | 8083 | 8080 | 8081 |
 | `DB_NAME` | `identity_db` | `customer_db` | `vehicle_db` |
-| `KAFKA_PRODUCER_TOPIC` | `identity.user-events` | `customer.events` | `vehicle.events` |
+| Produces to | `identity.user-events` | `customer.account.*.v1` | `vehicle.*.v1` |
 | `KAFKA_CONSUMER_TOPIC` | – | `identity.user-events` | `identity.user-events` |
 | `JWT_SECRET` | required, ≥ 32 bytes | – | – |
+
+customer-service and vehicle-service publish to the fixed topic names in `internal/constants/topics.go`; their `KAFKA_PRODUCER_TOPIC` setting isn't used. vehicle-service also consumes `KAFKA_SERVICE_COMPLETED_TOPIC` (default `scheduler.appointment.service-completed.v1`). Event contracts: [architecture-design.md §3](docs/architecture-design.md).
 
 Shared: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_SSLMODE`, `DB_MAX_OPEN_CONNS`, `KAFKA_BROKERS` (`localhost:9092` from the host), `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `LOG_LEVEL`, `LOG_FORMAT`.
 
