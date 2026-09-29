@@ -1,60 +1,230 @@
-# README
+# Service Bay
 
-## Overview
+Service Bay is a microservices backend (plus a React web app) for a vehicle service and booking business: customers, their vehicles, ownership and warranty, and, later, bookings at service hubs, billing and notifications.
 
-Base code to create new another repository
+The Go services follow a hexagonal (ports and adapters) layout, keep one Postgres database per service, and publish domain events to Kafka through a transactional outbox.
+
+---
+
+## Project status
+
+Last updated: 2026-09-29.
+
+| Component | State | What it does today |
+|-----------|-------|--------------------|
+| **identity-service** (`:8083`) | Implemented | Register, login, refresh and logout (JWT access token + refresh token in Redis), `GET /me`. Publishes `UserCreated` to `identity.user-events`. |
+| **customer-service** (`:8080`) | Implemented | Customer CRUD with cursor pagination, optimistic locking on update, soft delete. Publishes to `customer.events`; consumes `identity.user-events`. |
+| **vehicle-service** (`:8081`) | Implemented | Register, search (VIN / plate), update status and warranty, assign owner, transfer ownership (row-locked), list a customer's vehicles, warranty / materials / service-history reads. Publishes `vehicle.*` events. |
+| **frontend** (`:5173`) | Implemented | React 19 + Vite app: sign in / sign up, customer list and detail, vehicle search, register, detail, ownership and records. |
+| Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Flink, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
+| Load tests | Implemented | k6 and curl scenarios (smoke, baseline, load, stress, spike, soak) in [loadtest/](loadtest/). |
+| dealership, scheduler, billing, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
+
+Known gaps:
+
+- vehicle-service and customer-service log `identity.user-events` but don't create local profiles from them yet.
+- The frontend calls the services directly (CORS is open, `*`); there is no API gateway.
+- Only identity-service checks tokens (`GET /me`). customer-service and vehicle-service endpoints are unauthenticated.
+- customer-service and vehicle-service use `BIGINT` ids, not the UUIDs the architecture calls for (see [architecture-design.md §0](docs/architecture-design.md)).
+- The service Dockerfiles build `GOARCH=amd64` binaries (see [Troubleshooting](#troubleshooting) for Apple Silicon).
 
 ---
 
 ## Documentation
 
 * [Business Requirement](docs/business-requirement.md)
-* [Architecture Design](docs/architecture-design.md)
-* [Technical Requirement](docs/technical-requirement.md)
+* [Architecture Design](docs/architecture-design.md): service map, event contracts, data ownership, and what's built so far (§0)
+* [Technical Requirement](docs/technical-requirement.md): scale and HA targets, and today's stack (§1a)
 * [Responsibility Planning](docs/responsibility-planning.md)
+* Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
+* [Kubernetes manifests and load-test tiers](k8s/README.md)
+* [Load tests](loadtest/README.md)
 
 ---
 
-## Repository Purpose
+## Repository layout
 
-* Clean and normalize data from multiple sources
-* Prepare data for banking reports
-* Support extensible data ingestion (DB, Queue, etc.)
-* Follow layered / hexagonal architecture
-
----
-
-## Setup Guide
-
-### Local Environment
-
-1. Create environment variables:
-
-```bash
-cp .env.example .env
+```
+.
+├── identity-service/    Go module: auth, users, JWT
+├── customer-service/    Go module: customer profiles
+├── vehicle-service/     Go module: vehicles, ownership, warranty
+├── frontend/            React + TypeScript + Vite web app
+├── postgres/            init SQL (one database per service) and seed data
+├── k8s/                 Kustomize base, tier overlays, metrics-server add-on
+├── loadtest/            k6 and sh load-test scenarios
+├── prometheus/ grafana/ loki/ alloy/   observability config
+├── docs/                requirements and architecture
+└── docker-compose.yml   full local stack
 ```
 
-2. Update your local configuration in `.env`
+---
 
-3. Run the initialization script:
+## Prerequisites
 
-```bash
-sh init.sh
-``` 
+| Tool | Version | Needed for |
+|------|---------|------------|
+| Docker + Docker Compose | recent Docker Desktop, or Engine with the compose plugin | the full stack |
+| Go | 1.26+ | running or testing a service outside Docker |
+| Node.js + npm | Node 22 LTS or newer | the frontend |
+| kubectl | any recent version | Kubernetes only |
+| k6, psql | | load tests only |
+
+Ports used on `localhost`: 3000, 3100, 5173, 5432, 6379, 8080–8083, 9090, 9092, 12345. Stop anything else listening on them first.
 
 ---
 
-### Docker Setup
+## Quick start (Docker Compose)
+
+This runs all three services and every piece of infrastructure. You only need Docker.
+
+1. Clone and enter the repo:
+
+   ```bash
+   git clone git@github.com:phankieuphu/service-bay-scheduler.git
+   cd service-bay-scheduler
+   ```
+
+2. Build and start the stack:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+   On first start, Postgres runs [postgres/init/](postgres/init/): it creates one database per service (`identity_db`, `customer_db`, `vehicle_db`, …), their tables, and seed customers and vehicles. The services wait for Postgres to be healthy.
+
+3. Check that everything is up:
+
+   ```bash
+   docker compose ps
+   curl localhost:8083/healthz   # identity-service
+   curl localhost:8080/readyz    # customer-service (checks Postgres, Kafka, Redis)
+   curl localhost:8081/readyz    # vehicle-service
+   ```
+
+   If a service exited because Kafka wasn't ready yet, run `docker compose up -d` again.
+
+4. Try the API:
+
+   ```bash
+   # create a user and log in
+   curl -s -X POST localhost:8083/api/v1/auth/register \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"demo@example.com","password":"password123"}'
+   curl -s -X POST localhost:8083/api/v1/auth/login \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"demo@example.com","password":"password123"}'
+
+   # list seeded customers and vehicles
+   curl -s 'localhost:8080/api/v1/customer?limit=5'
+   curl -s 'localhost:8081/api/v1/vehicle?limit=5'
+   ```
+
+5. Start the frontend (next section) and open http://localhost:5173.
+
+| URL | What |
+|-----|------|
+| http://localhost:8083/api/v1 | identity-service |
+| http://localhost:8080/api/v1 | customer-service |
+| http://localhost:8081/api/v1 | vehicle-service |
+| http://localhost:3000 | Grafana (`admin` / `admin`) |
+| http://localhost:9090 | Prometheus |
+| http://localhost:8082 | Flink web UI |
+| http://localhost:12345 | Alloy debug UI |
+| `localhost:5432` | Postgres (`postgres` / `postgres`) |
+| `localhost:9092` | Kafka |
+| `localhost:6379` | Redis |
+
+Useful commands:
 
 ```bash
-docker compose up -d
+docker compose logs -f vehicle-service             # follow one service's logs
+docker compose up -d --build vehicle-service       # rebuild after a code change
+docker compose down                                # stop, keep data
+docker compose down -v                             # stop and delete all data
 ```
 
-Grafana: http://localhost:3000 (`admin` / `admin`), with Prometheus metrics and Loki logs. Prometheus: http://localhost:9090. See [Observability](#observability).
+Postgres only runs the init scripts when its data volume is empty. After changing a schema in `postgres/init/`, run `docker compose down -v` (this deletes all local data) and start again.
 
 ---
 
-### Kubernetes Setup
+## Run the frontend
+
+The frontend is a Vite dev server that calls the three services directly.
+
+```bash
+cd frontend
+cp .env.example .env    # API URLs, defaults point at the compose ports
+npm install
+npm run dev             # http://localhost:5173
+```
+
+| Variable | Default |
+|----------|---------|
+| `VITE_IDENTITY_API_URL` | `http://localhost:8083/api/v1` |
+| `VITE_CUSTOMER_API_URL` | `http://localhost:8080/api/v1` |
+| `VITE_VEHICLE_API_URL` | `http://localhost:8081/api/v1` |
+
+Other scripts: `npm run build` (type-check and production build into `dist/`), `npm run preview`, `npm run lint` (oxlint).
+
+---
+
+## Run a service with Go (without Docker)
+
+Use this when you're working on one service and want fast restarts. Start the infrastructure in Docker, stop the container of the service you're running yourself, then run it with Go:
+
+```bash
+docker compose up -d postgres kafka redis
+docker compose stop vehicle-service      # if it was running, so the port is free
+
+cd vehicle-service                       # or customer-service / identity-service
+cp .env.example .env                     # loaded automatically on start
+go run ./cmd/server
+```
+
+Each service is its own Go module (there is no `go.work`), so always `cd` into its directory first. Every environment variable and its default is defined in the service's `config/config.go`. The main ones:
+
+| Variable | identity-service | customer-service | vehicle-service |
+|----------|------------------|------------------|-----------------|
+| `API_PORT` | 8083 | 8080 | 8081 |
+| `DB_NAME` | `identity_db` | `customer_db` | `vehicle_db` |
+| Produces to | `identity.user-events` | `customer.account.*.v1` | `vehicle.*.v1` |
+| `KAFKA_CONSUMER_TOPIC` | – | `identity.user-events` | `identity.user-events` |
+| `JWT_SECRET` | required, ≥ 32 bytes | – | – |
+
+customer-service and vehicle-service publish to the fixed topic names in `internal/constants/topics.go`; their `KAFKA_PRODUCER_TOPIC` setting isn't used. vehicle-service also consumes `KAFKA_SERVICE_COMPLETED_TOPIC` (default `scheduler.appointment.service-completed.v1`). Event contracts: [architecture-design.md §3](docs/architecture-design.md).
+
+Shared: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_SSLMODE`, `DB_MAX_OPEN_CONNS`, `KAFKA_BROKERS` (`localhost:9092` from the host), `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `LOG_LEVEL`, `LOG_FORMAT`.
+
+Every service exposes `GET /healthz` (liveness), `GET /readyz` (dependencies) and `GET /metrics` (Prometheus).
+
+---
+
+## Testing
+
+Unit tests live next to the code (mostly `internal/domain/services/*_test.go`) and use hand-written mocks of the `ports` interfaces, so they need no database or Kafka.
+
+```bash
+cd vehicle-service     # or customer-service / identity-service
+go test ./...
+go vet ./...
+go test ./internal/domain/services/ -run TestVehicleService_TransferVehicle   # a single test
+```
+
+Test files must end in `_test.go` (underscore). A file ending in `-test.go` compiles as normal source, and `go test` never runs its tests.
+
+Against a running stack:
+
+```bash
+./vehicle-service/scripts/transfer-race-test.sh   # concurrent transfers of one vehicle; exactly one must win
+cd loadtest && ./seed/seed.sh && ./sh/smoke.sh      # every API case, asserted
+```
+
+See [loadtest/README.md](loadtest/README.md) for load, stress, spike and soak runs (`make loadtest SCENARIO=load TIER=100k` from the repo root).
+
+---
+
+## Run on Kubernetes
 
 All manifests live under [k8s/](k8s/) and are wired together with a `kustomization.yaml`. Everything runs in the `service-bay` namespace.
 
@@ -135,7 +305,7 @@ kubectl rollout restart deployment/vehicle-service -n service-bay
 kubectl delete -k k8s/
 ```
 
-#### Troubleshooting
+### Troubleshooting
 
 | Symptom | Cause / fix |
 |---------|-------------|
@@ -211,109 +381,36 @@ Without Grafana, you can still read raw logs with `docker compose logs -f <servi
 
 ---
 
-## Initializing a New Data Flow
-
-### 1. Define Data Sources
-
-#### From Database
-
-* Implement repository adapters
-
-#### From Queue
-
-* Location: `internal/adapters/consumer`
-* Steps:
-
-   * Add a new consumer: `{name}Consumer.go`
-   * Define input DTOs in the `/dto` folder
-
----
-
-### 2. Define a New Service
-
-1. Define service interface:
-
-   * File: `internal/domain/ports/services.go`
-
-2. Implement service logic:
-
-   * Folder: `internal/domain/services`
-
-3. Inputs & outputs:
-
-   * Use DTOs from `internal/adapters/http` if the service is HTTP-based
-
----
-
-### 3. Define Outbound Adapters (Repositories)
-
-For database or external storage operations:
-
-1. Define repository interface:
-
-   * `internal/domain/ports/repositories.go`
-
-2. Create adapter struct:
-
-   * `internal/adapters/repositories`
-
-3. Implement repository logic
-
----
-
-## Service Architecture Layers
+## Architecture in brief
 
 ```
-Config
-  |
-DB Provider
-  |
-Repository (Storage)
-  |
-Service (Use Case)
+HTTP handler (gin) ──┐
+                     ├─→ domain Service (ports.*Service) → Repository (ports.*Repository) → GORM → Postgres
+Kafka consumer ──────┘                  │
+                                        └─→ outbox row (same transaction) → OutboxRelay → Kafka
 ```
 
+* **`internal/domain/ports/`**: every interface (services, repositories, cache, transaction manager, producer). Tests mock against these.
+* **`internal/domain/services/`**: business logic. Constructors take interfaces, not concrete adapters.
+* **`internal/adapters/`**: `http/` (gin handlers and DTOs), `repository/` (GORM), `database/` (connection, transactions, models), `kafka/` (producer, consumer, outbox relay), `cache/` (Redis), `metrics/` (Prometheus).
+* **Transactional outbox**: a write and the event it triggers are committed in one `RunInTx`. The outbox relay polls every 2 s and publishes to Kafka in order.
+* **Errors**: repositories return `ports.ErrNotFound` / `ports.ErrConflict`, and handlers map them to `404` / `409`.
 
+### Adding to a service
 
----
+1. Add the interface method in `internal/domain/ports/`.
+2. Implement it in `internal/domain/services/` and add a `_test.go` using the existing mocks.
+3. Add the repository method in `internal/adapters/repository/`, and a GORM model in `internal/adapters/database/models/` if there's a new table.
+4. Add the SQL to that service's file in `postgres/init/` (then `docker compose down -v` locally).
+5. Add the handler and DTOs in `internal/adapters/http/`, and register the route in `server.go`.
+6. For a new Kafka event, write it to the outbox inside the same transaction, and document its contract in [architecture-design.md](docs/architecture-design.md).
 
-
-
-## Database Configuration
-
-* Define database models in:
-
-```
-internal/adapters/database/models
-```
----
-* **Note**: if your table want to define is SQL please update file **init.sql** your SQL script
-
-## Testing
-
-* Write unit tests for services and repositories
-* Mock external dependencies
-* Run tests using standard Go **tooling**
-* Run `golangci-lint run` for ensure correct syntax
----
-
-## Deployment
-
-* Docker-based deployment
-* Environment-driven configuration
-* CI/CD friendly
+A new service copies an existing one (customer-service is the smallest) and gets its own database in `postgres/init/00-create-databases.sql`, a compose entry and a `k8s/base/` folder.
 
 ---
 
-## Contribution Guidelines
+## Contribution guidelines
 
-* Write tests for all new features
-* Follow existing code structure
-* Code reviews are mandatory
-
----
-
-## Contact
-
-* Repository owner / admin
-* Project team members
+* Write tests for new features.
+* Follow the existing layout and error conventions.
+* Code review is required: open a PR against `master`.

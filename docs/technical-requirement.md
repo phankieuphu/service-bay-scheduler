@@ -19,6 +19,24 @@ Non-functional requirements and technical constraints for Service Bay, derived f
 
 This document does not revisit *which* services exist — that's settled in `architecture-design.md` §1. It defines the bar each of those services (and the Postgres/Redis/Kafka they sit on) must clear.
 
+### 1a. What's in place today (2026-09-29)
+
+The table above is the target. Current state:
+
+| Layer | Today |
+|---|---|
+| Language | Go 1.26, gin HTTP, GORM, IBM sarama for Kafka. Three services built (identity, customer, vehicle); see `architecture-design.md` §0. |
+| PostgreSQL | Postgres 16, one instance and one database per service. No replicas. |
+| Cache | Redis 7.2, single node: identity-service refresh tokens, customer list-page cache. |
+| Messaging | Kafka, single broker, replication factor 1. |
+| Connection pooling | PgBouncer only in the `k8s/overlays/tier-1m` overlay; other setups connect directly with a per-pod `DB_MAX_OPEN_CONNS`. |
+| Deployment | Docker Compose, and Kubernetes via Kustomize (`k8s/base` plus tier overlays with HPAs). |
+| Gateway | Not built. The frontend calls the services directly. |
+| Observability | Prometheus metrics (services, Postgres and Kafka exporters, Flink) and Grafana dashboards; structured JSON logs (slog) shipped by Grafana Alloy to Loki. No OpenTelemetry tracing yet. |
+| Load testing | k6 and sh scenarios in `loadtest/` (smoke, baseline, load, stress, spike, soak). |
+
+None of the HA mechanisms in §4 (replicas, failover, RF 3 Kafka, multi-AZ) are in place yet, and neither are the idempotency keys in §7. The one idempotent consumer so far is vehicle-service's `ServiceCompleted` handler, which ignores a duplicate `appointment_id`.
+
 ---
 
 ## 2. Scale Targets (given)
@@ -30,6 +48,8 @@ This document does not revisit *which* services exist — that's settled in `arc
 | Availability | No single point of failure in any tier (app, cache, DB, broker) |
 
 Everything below turns these three lines into concrete engineering targets.
+
+The load-test tiers in `loadtest/` and `k8s/overlays/` (issue #38) use a different, smaller traffic model: 1k / 100k / 1M *registered* users at a design peak of 10 / 100 / 1,000 RPS. §3's numbers are for *concurrent* users, so they're much higher (~200 / ~20,000 RPS). The two models haven't been reconciled yet.
 
 ---
 

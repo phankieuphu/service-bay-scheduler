@@ -5,8 +5,8 @@ Vehicle registry for Service Bay: vehicles, who owns them, their warranty, insta
 ## Run
 
 ```bash
-cp .env.example .env         # note: stale template; real vars are in config/config.go
-go run ./cmd/server          # :8080 by default; docker compose runs it on :8081
+cp .env.example .env         # every var and its default: config/config.go
+go run ./cmd/server          # :8081 with .env (code default :8080)
 go test ./...
 ```
 

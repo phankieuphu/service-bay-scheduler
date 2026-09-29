@@ -2,6 +2,26 @@
 
 Target service decomposition for Service Bay, built from `business-requirement.md` §2–3 and the actor/entity list there. Infra assumptions match the existing `docker-compose.yml`: PostgreSQL, Kafka, Redis.
 
+Most of this document is the **target** design. §0 says how much of it is built.
+
+---
+
+## 0. Implementation status (2026-09-29)
+
+| Part of the design | Status |
+|---|---|
+| identity-service | Built: register, login, refresh, logout, `GET /me`. Publishes `UserCreated` (§3a). |
+| customer-service | Built: customer CRUD, cursor pagination, optimistic locking, soft delete. Publishes §3c events. Consumes `identity.user-events` but only logs them for now. |
+| vehicle-service | Built: registry, owner assign/transfer, warranty, installed materials, service history. Produces and consumes the §3b events. Consumes `identity.user-events` but only logs them for now. |
+| dealership, scheduler, billing, notification, report services | Not built. Each has a database and schema in `postgres/init/` (`04`–`08`), and nothing else yet. |
+| API Gateway (§2, §7) | Not built. The web app (`frontend/`) calls each service directly, and the services allow any CORS origin. Only identity-service validates tokens (`GET /me`); customer-service and vehicle-service endpoints are unauthenticated. |
+| Transactional outbox (§3) | Built in all three services: outbox row in the same transaction, relay polls every 2 s. |
+| Database per service (§5, §7) | Built: one Postgres instance, one database per service, no cross-database FKs. |
+| Ids (§5a) | Partly as designed. identity-service mints UUIDs; customer-service and vehicle-service still use `BIGINT` identity keys, and cross-service references (`customer_vehicle.customer_id`, `vehicle_material.material_id`, …) are `BIGINT` too. Customer profiles don't store the identity `user_id` yet. |
+| Redis (§7) | Used for identity-service refresh tokens and a 30 s cache of customer list pages. No availability cache yet (no scheduler-service). |
+| Kafka (§3, §7) | One broker (KRaft in Docker Compose, ZooKeeper in `k8s/`), auto-created topics. |
+| Flink | Deployed in Compose and `k8s/`, but no jobs yet. |
+
 ---
 
 ## 1. Service Map
@@ -120,6 +140,7 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 - `user.id` is a UUID minted by identity-service. A consuming service stores it as a plain `user_id` reference on its own profile row (§5a), not as that row's primary key.
 - Delivery is at-least-once (outbox relay + Kafka), so consumers must be idempotent — dedupe on `event_id` or upsert by `user.id`.
 - Fields may be added; existing fields are never renamed or removed without a new topic version.
+- **Current consumers**: customer-service and vehicle-service subscribe and log each message. Creating a local profile from `UserCreated` is not implemented yet.
 
 ---
 
@@ -154,6 +175,20 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 | `vehicle.vehicle-customer.assigned.v1` | `POST /vehicle/:id/owner` | `vehicle_id`, `customer_id`, `owned_from` |
 | `vehicle.vehicle-customer.transfer.v1` | `POST /transfer` | (pre-existing; untagged Go field names: `Date`, `From`, `To`, `VehicleID`) |
 
+### 3c. customer-service event contracts
+
+**Produced** (via the outbox; key = customer id). The topic names come from `customer-service/internal/constants/topics.go`; the `KAFKA_PRODUCER_TOPIC` setting is not used for them.
+
+| Topic | When | Payload |
+|---|---|---|
+| `customer.account.created.v1` | `POST /customer` | The customer entity, serialized without JSON tags: `ID`, `Name`, `Email`, `Phone`, `BirthDay`, `Status`, `CreatedAt`, `UpdatedAt` |
+| `customer.account.updated.v1` | `PUT /customer/:id` | `id`, `name` (omitted if unchanged), `birth_day` (`YYYY-MM-DD`, omitted if unchanged), `updated_at` |
+| `customer.account.deleted.v1` | `DELETE /customer/:id` (soft delete) | `id`, `deleted_at` |
+
+Unlike §3a and §3b, these payloads carry no `event_id` or `occurred_at`, and `created.v1` uses Go field names. A consumer should upsert by customer id. Adding `event_id` and snake_case fields before anything consumes these topics would bring them in line with the other contracts.
+
+---
+
 ## 4. Booking correctness across service boundaries
 
 Splitting the domain doesn't have to weaken the double-booking guarantee, because the fields that matter for that guarantee — bay id, technician id, vehicle id, time range — all live on the Appointment row itself, inside scheduler-service's own database. A uniqueness/overlap constraint scoped to that one table, in that one database, still prevents two bookings from claiming the same bay, technician, or vehicle at the same time, with no cross-service coordination needed for that part.
@@ -175,7 +210,7 @@ Once each service has its own schema, there's no database-level foreign key acro
 
 Use for: `Appointment.vehicle_id`, `.customer_id`, `.bay_id`, `.technician_id`, `.service_type_id`.
 
-- Store the id as a plain column, no FK constraint. The *owning* service mints it — use UUIDs, not auto-increment integers, so an id is unambiguous wherever it travels between services.
+- Store the id as a plain column, no FK constraint. The *owning* service mints it — use UUIDs, not auto-increment integers, so an id is unambiguous wherever it travels between services. (Current state: only identity-service does this; customer-service and vehicle-service still use `BIGINT` keys. See §0.)
 - Validate it exists at the point where a FK would normally catch a typo: either the caller already validated it upstream (the customer picked a vehicle from a list vehicle-service returned, so it's known-good), or scheduler makes a direct existence check before insert.
 - Once written, treat it as historical fact — don't re-validate on every read. An Appointment shouldn't become "invalid" because the vehicle was later deleted; that's what a soft-delete/deactivated state on the owning side is for.
 

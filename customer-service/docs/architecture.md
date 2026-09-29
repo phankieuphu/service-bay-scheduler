@@ -1,5 +1,7 @@
 # Customer Service — Architecture & Design
 
+> **Historical.** This document describes an early snapshot of customer-service (MySQL driver, panicking repositories, no tests). All of that has since been implemented, so its status notes and "Known Gaps" no longer apply. For the current API, see [../README.md](../README.md); for events and data ownership, see [architecture-design.md](../../docs/architecture-design.md).
+
 Internal design reference for `customer-service`. Where the root [`docs/architecture-design.md`](../../docs/architecture-design.md) describes the service map for the whole system, this document zooms into the one service: its endpoints, its two async ingress paths, its internal layering, and how to test/observe it. Status notes below reflect the code as it stands today, not the target design — several layers are wired but not yet functional, and that's called out explicitly rather than glossed over.
 
 Per the root doc's §1 service map: customer-service owns **Customer (profile, contact)** only — no vehicle data.
