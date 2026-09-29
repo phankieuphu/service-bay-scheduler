@@ -46,10 +46,11 @@ func (e *CustomerService) DeleteProfile(ctx context.Context, customerID int64) e
 			return err
 		}
 
-		payload, err := json.Marshal(events.DeleteCustomerEvent{
+		now := time.Now()
+		payload, err := json.Marshal(events.NewCustomerEvent(events.CustomerDeleted, now, events.CustomerDeletion{
 			ID:        customerID,
-			DeletedAt: times.NewTime(time.Now()),
-		})
+			DeletedAt: times.NewTime(now),
+		}))
 		if err != nil {
 			return err
 		}
@@ -82,19 +83,17 @@ func (e *CustomerService) UpdateProfile(ctx context.Context, customerID int64, p
 		if err := e.repository.Update(ctx, payload); err != nil {
 			return err
 		}
-
-		event := events.UpdateCustomerEvents{
-			ID:        customerID,
-			Name:      payload.Name,
-			UpdatedAt: times.NewTime(time.Now()),
-		}
-		if !payload.BirthDay.IsZero() {
-			event.BirthDay = payload.BirthDay.Format(time.DateOnly)
-		}
 		if payload.BirthDay.After(time.Now()) {
 			return errors.New("birthday must be before current date")
 		}
-		eventPayload, err := json.Marshal(event)
+
+		// Read the row back inside the transaction so the event carries the
+		// full state after the change, including the new updated_at.
+		updated, err := e.repository.GetByID(ctx, customerID)
+		if err != nil {
+			return err
+		}
+		eventPayload, err := json.Marshal(events.NewCustomerEvent(events.CustomerUpdated, updated.UpdatedAt, events.NewCustomerState(updated)))
 		if err != nil {
 			return err
 		}
@@ -128,7 +127,7 @@ func (e *CustomerService) CreateCustomer(ctx context.Context, customer entity.Cu
 		}
 		customer = created
 
-		payload, err := json.Marshal(customer)
+		payload, err := json.Marshal(events.NewCustomerEvent(events.CustomerCreated, customer.CreatedAt, events.NewCustomerState(customer)))
 		if err != nil {
 			return err
 		}

@@ -13,8 +13,6 @@ import (
 	"vehicle-service/internal/domain/events"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
-
-	"github.com/google/uuid"
 )
 
 type VehicleService struct {
@@ -136,13 +134,11 @@ func (v *VehicleService) AssignInitialOwner(ctx context.Context, vehicleID, cust
 			}
 			return err
 		}
-		return v.writeEvent(ctx, constants.OwnerAssigned, strconv.FormatInt(vehicleID, 10), events.OwnerAssigned{
-			EventID:    uuid.NewString(),
-			OccurredAt: time.Now().UTC(),
-			VehicleID:  vehicleID,
+		return v.writeEvent(ctx, constants.OwnerAssigned, strconv.FormatInt(vehicleID, 10), events.NewVehicleEvent(events.OwnerAssigned, time.Now(), events.Ownership{
+			ID:         vehicleID,
 			CustomerID: customerID,
 			OwnedFrom:  ownedFrom.Format(time.DateOnly),
-		})
+		}))
 	})
 	if err != nil && !isClientError(err) {
 		logger.ErrorContext(ctx, "failed to assign initial owner", "vehicle", vehicleID, "customer", customerID, "error", err)
@@ -182,24 +178,8 @@ func (v *VehicleService) RegisterVehicle(ctx context.Context, vehicle entity.Veh
 		if err != nil {
 			return err
 		}
-		payload, err := json.Marshal(events.VehicleCreated{
-			EventID:         uuid.NewString(),
-			OccurredAt:      created.CreatedAt,
-			VehicleID:       created.ID,
-			Vin:             created.Vin,
-			LicensePlate:    created.LicensePlate,
-			VehicleModelID:  created.VehicleModelID,
-			WarrantyEndDate: formatDate(created.WarrantyEndDate),
-			Status:          string(created.Status),
-		})
-		if err != nil {
-			return err
-		}
-		return v.outbox.Create(ctx, entity.OutboxMessage{
-			Key:     strconv.FormatInt(created.ID, 10),
-			Topic:   constants.VehicleCreated,
-			Payload: payload,
-		})
+		return v.writeEvent(ctx, constants.VehicleCreated, strconv.FormatInt(created.ID, 10),
+			events.NewVehicleEvent(events.VehicleCreated, created.CreatedAt, vehicleState(created)))
 	})
 	if err != nil {
 		if !isClientError(err) {
@@ -260,24 +240,16 @@ func (v *VehicleService) UpdateVehicle(ctx context.Context, vehicleID int64, upd
 		}
 
 		key := strconv.FormatInt(vehicleID, 10)
-		if err := v.writeEvent(ctx, constants.VehicleUpdate, key, events.VehicleUpdated{
-			EventID:         uuid.NewString(),
-			OccurredAt:      updated.UpdatedAt,
-			VehicleID:       vehicleID,
-			Status:          string(updated.Status),
-			WarrantyEndDate: formatDate(updated.WarrantyEndDate),
-			UpdatedAt:       updated.UpdatedAt,
-		}); err != nil {
+		if err := v.writeEvent(ctx, constants.VehicleUpdate, key,
+			events.NewVehicleEvent(events.VehicleUpdated, updated.UpdatedAt, vehicleState(updated))); err != nil {
 			return err
 		}
 		if warrantyChanged {
-			return v.writeEvent(ctx, constants.WarrantyChanged, key, events.WarrantyChanged{
-				EventID:                 uuid.NewString(),
-				OccurredAt:              updated.UpdatedAt,
-				VehicleID:               vehicleID,
+			return v.writeEvent(ctx, constants.WarrantyChanged, key, events.NewVehicleEvent(events.WarrantyChanged, updated.UpdatedAt, events.WarrantyChange{
+				ID:                      vehicleID,
 				PreviousWarrantyEndDate: formatDate(current.WarrantyEndDate),
 				WarrantyEndDate:         formatDate(updated.WarrantyEndDate),
-			})
+			}))
 		}
 		return nil
 	})
@@ -298,6 +270,20 @@ func (v *VehicleService) writeEvent(ctx context.Context, topic, key string, even
 		return err
 	}
 	return v.outbox.Create(ctx, entity.OutboxMessage{Topic: topic, Key: key, Payload: payload})
+}
+
+// vehicleState is the VehicleCreated / VehicleUpdated payload for v.
+func vehicleState(v entity.Vehicle) events.VehicleState {
+	return events.VehicleState{
+		ID:              v.ID,
+		Vin:             v.Vin,
+		LicensePlate:    v.LicensePlate,
+		VehicleModelID:  v.VehicleModelID,
+		WarrantyEndDate: formatDate(v.WarrantyEndDate),
+		Status:          string(v.Status),
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
+	}
 }
 
 // isClientError reports whether err is one of the sentinel errors a caller
@@ -383,15 +369,13 @@ func (v *VehicleService) TransferVehicle(ctx context.Context, transferVehicle en
 		if err != nil {
 			return err
 		}
-		payload, err := json.Marshal(transferVehicle)
-		if err != nil {
-			return err
-		}
-		return v.outbox.Create(ctx, entity.OutboxMessage{
-			Key:     strconv.FormatInt(int64(transferVehicle.VehicleID), 10),
-			Topic:   constants.TransferVehicle,
-			Payload: payload,
-		})
+		previousOwner := transferVehicle.From
+		return v.writeEvent(ctx, constants.TransferVehicle, strconv.FormatInt(transferVehicle.VehicleID, 10), events.NewVehicleEvent(events.VehicleTransferred, time.Now(), events.Ownership{
+			ID:                 transferVehicle.VehicleID,
+			CustomerID:         transferVehicle.To,
+			PreviousCustomerID: &previousOwner,
+			OwnedFrom:          transferVehicle.Date.Format(time.DateOnly),
+		}))
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to transfer vehicle", "error", err)

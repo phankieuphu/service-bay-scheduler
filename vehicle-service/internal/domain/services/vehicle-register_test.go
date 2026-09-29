@@ -71,11 +71,12 @@ func TestVehicleService_RegisterVehicle(t *testing.T) {
 		if outboxMsg.Topic != constants.VehicleCreated || outboxMsg.Key != "42" {
 			t.Errorf("outbox topic/key = %q/%q", outboxMsg.Topic, outboxMsg.Key)
 		}
-		var event events.VehicleCreated
+		var event events.VehicleEvent[events.VehicleState]
 		if err := json.Unmarshal(outboxMsg.Payload, &event); err != nil {
 			t.Fatalf("payload: %v", err)
 		}
-		if event.EventID == "" || event.VehicleID != 42 || event.Vin != validVin || event.WarrantyEndDate == nil || *event.WarrantyEndDate != "2030-07-11" {
+		if event.EventID == "" || event.EventType != events.VehicleCreated || event.Vehicle.ID != 42 || event.Vehicle.Vin != validVin ||
+			event.Vehicle.WarrantyEndDate == nil || *event.Vehicle.WarrantyEndDate != "2030-07-11" {
 			t.Errorf("unexpected event %+v", event)
 		}
 	})
