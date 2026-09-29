@@ -333,3 +333,110 @@ func TestCustomer_UpdateCustomer(t *testing.T) {
 		})
 	}
 }
+
+func TestCustomer_CreateCustomer(t *testing.T) {
+	errOutbox := errors.New("outbox unavailable")
+
+	tests := []struct {
+		name         string
+		customer     entity.Customer
+		createFunc   func(ctx context.Context, customer entity.Customer) (entity.Customer, error)
+		outboxErr    error
+		wantID       int64
+		wantErr      error
+		wantOutboxes int
+	}{
+		{
+			name: "created and outbox event written",
+			customer: entity.Customer{
+				Name:   "Leo",
+				Email:  "leo@example.com",
+				Status: constants.CustomerStatus("BANNED"), // must be overridden to ACTIVE
+			},
+			createFunc: func(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
+				if customer.Status != constants.StatusActive {
+					return entity.Customer{}, fmt.Errorf("expected status %q, got %q", constants.StatusActive, customer.Status)
+				}
+				customer.ID = 7
+				return customer, nil
+			},
+			wantID:       7,
+			wantOutboxes: 1,
+		},
+		{
+			name:     "duplicate email",
+			customer: entity.Customer{Name: "Leo", Email: "leo@example.com"},
+			createFunc: func(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
+				return entity.Customer{}, ports.ErrConflict
+			},
+			wantErr: ports.ErrConflict,
+		},
+		{
+			name:     "outbox write fails",
+			customer: entity.Customer{Name: "Leo", Email: "leo@example.com"},
+			createFunc: func(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
+				customer.ID = 7
+				return customer, nil
+			},
+			outboxErr:    errOutbox,
+			wantErr:      errOutbox,
+			wantOutboxes: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &MockCustomerRepository{
+				CreateFunc: tt.createFunc,
+			}
+			var written []entity.OutboxMessage
+			outbox := &MockOutBoxRepository{
+				CreateFunc: func(ctx context.Context, message entity.OutboxMessage) error {
+					written = append(written, message)
+					return tt.outboxErr
+				},
+			}
+			txManager := &MockTxMangerRepository{
+				RunInTxFunc: func(ctx context.Context, fn func(ctx context.Context) error) error {
+					return fn(ctx)
+				},
+			}
+
+			service := NewCustomerService(config.Config{}, repo, outbox, txManager, &MockCacheRepository{})
+			result, err := service.CreateCustomer(t.Context(), tt.customer)
+
+			if len(written) != tt.wantOutboxes {
+				t.Fatalf("expected %d outbox message(s), got %d", tt.wantOutboxes, len(written))
+			}
+
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+				}
+				if result != (entity.Customer{}) {
+					t.Fatalf("expected empty customer on failure, got %+v", result)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.ID != tt.wantID || result.Status != constants.StatusActive {
+				t.Fatalf("unexpected result: %+v", result)
+			}
+
+			msg := written[0]
+			if msg.Topic != constants.CustomerCreated || msg.Key != "7" {
+				t.Fatalf("unexpected topic/key: %q/%q", msg.Topic, msg.Key)
+			}
+			var event entity.Customer
+			if err := json.Unmarshal(msg.Payload, &event); err != nil {
+				t.Fatalf("payload is not valid JSON: %v", err)
+			}
+			if event.ID != 7 || event.Email != "leo@example.com" || event.Status != constants.StatusActive {
+				t.Fatalf("unexpected event payload: %s", msg.Payload)
+			}
+		})
+	}
+}

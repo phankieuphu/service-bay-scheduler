@@ -22,7 +22,7 @@ type Consumer struct {
 // be one this service produces to, or it would consume its own output.
 func NewConsumer(cfg config.Kafka, topics []string, handler MessageHandler) (*Consumer, error) {
 	saramaCfg := sarama.NewConfig()
-	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetNewest
+	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	saramaCfg.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{
 		sarama.NewBalanceStrategyRoundRobin(),
 	}
