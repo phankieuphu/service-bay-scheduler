@@ -249,7 +249,7 @@ services:
       - backend
 
   alloy:
-    image: grafana/alloy:v1.10.2
+    image: grafana/alloy:v1.20.1
     container_name: alloy
     depends_on:
       - loki
