@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: service-bay
+spec:
+  replicas: 1
+  # Single replica: stop the old pod before starting the new one. A rolling
+  # update's surge pod doesn't fit on a memory-tight node and stays Pending.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: flink
+      component: taskmanager
+  template:
+    metadata:
+      labels:
+        app: flink
+        component: taskmanager
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9249"
+    spec:
+      containers:
+        - name: taskmanager
+          image: flink:1.20-java17
+          args: ["taskmanager"]
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1536Mi"
+            limits:
+              cpu: "1"
+              memory: "1536Mi" # = taskmanager.memory.process.size
+          envFrom:
+            - configMapRef:
+                name: flink-config
+          ports:
+            - containerPort: 6122
+              name: rpc
+            - containerPort: 9249
+              name: metrics
+---
+# Headless so Prometheus can reach the TaskManager metrics endpoint by DNS name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-taskmanager
+  namespace: service-bay
+spec:
+  clusterIP: None
+  selector:
+    app: flink
+    component: taskmanager
+  ports:
+    - name: metrics
+      port: 9249
+      targetPort: 9249

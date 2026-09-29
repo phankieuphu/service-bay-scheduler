@@ -1,21 +1,8 @@
+# Default entry point: `kubectl apply -k k8s/` deploys the base, which is sized
+# for the 1k-user load-test tier. For the other tiers (issue #38) apply an
+# overlay instead: k8s/overlays/tier-{1k,100k,1m}.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - namespace.yaml
-  - postgres/secret.yaml
-  - postgres/statefulset.yaml
-  - zookeeper/deployment.yaml
-  - kafka/deployment.yaml
-  - redis/deployment.yaml
-  - flink/configmap.yaml
-  - flink/jobmanager.yaml
-  - flink/taskmanager.yaml
-  - prometheus/configmap.yaml
-  - prometheus/deployment.yaml
-  - grafana/configmap.yaml
-  - grafana/deployment.yaml
-  - customer-service/deployment.yaml
-  - vehicle-service/deployment.yaml
-  - identity-service/secret.yaml
-  - identity-service/deployment.yaml
+  - base

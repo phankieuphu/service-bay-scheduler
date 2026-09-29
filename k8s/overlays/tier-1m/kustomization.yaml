@@ -1,0 +1,50 @@
+# Tier 1M users (issue #38): design peak 1,000 RPS, stress 2,500 RPS.
+# Suggested nodes: 8 x (4 vCPU, 16 GiB) — this tier does not fit on a laptop.
+#
+#   kubectl apply -k k8s/overlays/tier-1m
+#   TIER=1m ./loadtest/k6/run.sh load    # run k6 in-cluster, on its own node
+#
+# DB connection budget: 2 services x 6 pods x 20 = 240 client connections
+# would overflow max_connections=100, so the apps talk to PgBouncer
+# (pgbouncer.yaml), which multiplexes them onto <= 48 Postgres connections.
+#
+# Not covered here (see the README's tier section): Postgres read replica,
+# Redis replica, 3-broker Kafka / 3-node ZooKeeper, and Kafka disk.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - pgbouncer.yaml
+
+patches:
+  - path: resources.yaml
+  - target: { kind: HorizontalPodAutoscaler, name: "(customer|vehicle)-service" }
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 6
+  - target: { kind: ConfigMap, name: "(customer|vehicle)-service-config" }
+    patch: |
+      - op: replace
+        path: /data/DB_HOST
+        value: pgbouncer
+      - op: replace
+        path: /data/DB_MAX_OPEN_CONNS
+        value: "20"
+      - op: replace
+        path: /data/DB_MAX_IDLE_CONNS
+        value: "10"
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 100Gi
+  - target: { kind: PersistentVolumeClaim, name: prometheus-data }
+    patch: |
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 50Gi

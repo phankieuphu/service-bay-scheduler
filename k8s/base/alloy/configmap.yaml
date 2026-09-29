@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: service-bay
+data:
+  config.alloy: |
+    // Tails logs of every pod in the service-bay namespace through the Kubernetes API
+    // (no hostPath mounts needed) and ships them to Loki.
+
+    discovery.kubernetes "pods" {
+      role = "pod"
+      namespaces {
+        names = ["service-bay"]
+      }
+    }
+
+    discovery.relabel "pods" {
+      targets = discovery.kubernetes.pods.targets
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label  = "service"
+      }
+    }
+
+    loki.source.kubernetes "pods" {
+      targets    = discovery.relabel.pods.output
+      forward_to = [loki.process.app.receiver]
+    }
+
+    // Our Go services log JSON (slog); promote its level to a label so it can be filtered on.
+    loki.process "app" {
+      stage.match {
+        selector = "{service=~\"customer-service|vehicle-service\"}"
+
+        stage.json {
+          expressions = { level = "level" }
+        }
+
+        stage.labels {
+          values = { level = "" }
+        }
+      }
+
+      forward_to = [loki.write.default.receiver]
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "http://loki:3100/loki/api/v1/push"
+      }
+    }

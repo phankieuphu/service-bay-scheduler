@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: service-bay
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # Every pod in the namespace annotated with
+      #   prometheus.io/scrape: "true"
+      #   prometheus.io/port:   "<port>"
+      #   prometheus.io/path:   "/metrics"   (optional, default /metrics)
+      # is scraped directly (not through its Service), so each replica is its
+      # own series and HPA-added pods are picked up automatically. Labels:
+      #   job                  <- the pod's `app` label (customer-service, postgres, ...)
+      #   kubernetes_namespace <- namespace
+      #   kubernetes_pod_name  <- pod name
+      # (the Go Goroutines dashboard filters on the last two).
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [service-bay]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_phase]
+            action: keep
+            regex: Running
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            regex: (.+)
+            target_label: __metrics_path__
+          # Pods declaring several containerPorts yield one target per port;
+          # after this rewrite they are identical and Prometheus dedups them.
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: job
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: kubernetes_pod_name
+
+      # Per-container CPU, memory and CFS throttling from every kubelet's
+      # cAdvisor, fetched through the API server proxy (no kubelet port or
+      # cert needed). Kept to this namespace to bound cardinality. Needs the
+      # ClusterRole in rbac.yaml. Used by the PostgreSQL dashboard's
+      # Saturation row (Postgres CPU vs limit, throttling by container).
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+        metric_relabel_configs:
+          - source_labels: [namespace]
+            action: keep
+            regex: service-bay
+          - source_labels: [__name__]
+            action: keep
+            regex: container_(cpu_usage_seconds_total|cpu_cfs_periods_total|cpu_cfs_throttled_periods_total|cpu_cfs_throttled_seconds_total|spec_cpu_quota|spec_cpu_period|memory_working_set_bytes|spec_memory_limit_bytes)

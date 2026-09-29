@@ -1,0 +1,86 @@
+# PgBouncer between the services and Postgres (tier-1m only).
+#
+# Transaction pooling: a server connection is held only for the length of a
+# transaction, so 240 app connections share 2 replicas x 2 databases x 12 = 48
+# Postgres connections. Both services use GORM with PrepareStmt: true, which
+# needs max_prepared_statements (PgBouncer >= 1.21) in transaction mode.
+#
+# The edoburu image builds pgbouncer.ini from these env vars (DB_PASSWORD is
+# written to userlist.txt for scram-sha-256 auth); DB_NAME is unset, so the
+# "*" entry routes every database name to the same Postgres host.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: service-bay
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pgbouncer
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+    spec:
+      affinity:
+        podAntiAffinity: # one replica per node where possible
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: pgbouncer
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:v1.25.2-p0
+          ports:
+            - containerPort: 5432
+          env:
+            - name: DB_HOST
+              value: postgres
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            - name: AUTH_TYPE
+              value: scram-sha-256
+            - name: POOL_MODE
+              value: transaction
+            - name: MAX_PREPARED_STATEMENTS
+              value: "200"
+            - name: DEFAULT_POOL_SIZE # per database, per replica
+              value: "12"
+            - name: MAX_CLIENT_CONN
+              value: "500"
+          readinessProbe:
+            tcpSocket:
+              port: 5432
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "250m", memory: "128Mi" }
+            limits: { cpu: "250m", memory: "128Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: service-bay
+spec:
+  selector:
+    app: pgbouncer
+  ports:
+    - port: 5432
+      targetPort: 5432

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: service-bay
+spec:
+  replicas: 1
+  # Single replica: stop the old pod before starting the new one. A rolling
+  # update's surge pod doesn't fit on a memory-tight node and stays Pending.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      # The "kafka" Service would otherwise inject KAFKA_PORT=tcp://..., which
+      # cp-kafka's startup script rejects ("port is deprecated") and exits.
+      enableServiceLinks: false
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.6.0
+          # limits = requests -> Guaranteed QoS, evicted last
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "250m"
+              memory: "1Gi"
+          ports:
+            - containerPort: 9092
+          env:
+            # ~50% of the memory limit; the rest is OS page cache, which Kafka
+            # reads from. cp-kafka's default (1G) would not fit in a 1Gi limit.
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xms512m -Xmx512m"
+            - name: KAFKA_BROKER_ID
+              value: "1"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: zookeeper:2181
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka:9092
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: PLAINTEXT:PLAINTEXT
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: service-bay
+spec:
+  selector:
+    app: kafka
+  ports:
+    - port: 9092
+      targetPort: 9092

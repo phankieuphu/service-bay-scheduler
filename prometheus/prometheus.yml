@@ -2,6 +2,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# docker-compose only; k8s discovers pods instead (k8s/base/prometheus/configmap.yaml).
+# The kubernetes_namespace / kubernetes_pod_name labels mirror what k8s pod
+# discovery attaches, so the same Grafana dashboards work in both setups.
 scrape_configs:
   - job_name: prometheus
     static_configs:
@@ -11,17 +14,28 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["customer-service:8080"]
+        labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: customer-service }
 
   - job_name: vehicle-service
     metrics_path: /metrics
     static_configs:
       - targets: ["vehicle-service:8081"]
+        labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: vehicle-service }
 
   - job_name: identity-service
     metrics_path: /metrics
     static_configs:
       - targets: ["identity-service:8083"]
+        labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: identity-service }
 
   - job_name: flink
     static_configs:
       - targets: ["flink-jobmanager:9249", "flink-taskmanager:9249"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: kafka-exporter
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
