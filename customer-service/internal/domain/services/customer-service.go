@@ -134,7 +134,7 @@ func (e *CustomerService) CreateCustomer(ctx context.Context, customer entity.Cu
 
 		return e.outbox.Create(ctx, entity.OutboxMessage{
 			Topic:   constants.CustomerCreated,
-			Key:     strconv.FormatInt(customer.ID, 10),
+			Key:     strconv.FormatInt(created.ID, 10),
 			Payload: payload,
 		})
 	})

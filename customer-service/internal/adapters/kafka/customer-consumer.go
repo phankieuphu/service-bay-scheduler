@@ -18,7 +18,7 @@ type Consumer struct {
 
 func NewConsumer(cfg config.Kafka, handler MessageHandler) (*Consumer, error) {
 	saramaCfg := sarama.NewConfig()
-	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetNewest
+	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	saramaCfg.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{
 		sarama.NewBalanceStrategyRoundRobin(),
 	}
