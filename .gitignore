@@ -52,3 +52,7 @@ Thumbs.db
 .env
 
 .claude
+
+# Grafana Cloud remote-write token
+prometheus/secrets/*
+!prometheus/secrets/.gitkeep

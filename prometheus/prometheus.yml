@@ -2,6 +2,15 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Also ship every scraped series to Grafana Cloud. The access-policy token is
+# read from a gitignored file (prometheus/secrets/grafana-cloud-token); without
+# it remote write fails with 401s but local scraping keeps working.
+remote_write:
+  - url: https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/prom/push
+    basic_auth:
+      username: "3595680"
+      password_file: /etc/prometheus/secrets/grafana-cloud-token
+
 # docker-compose only; k8s discovers pods instead (k8s/base/prometheus/configmap.yaml).
 # The kubernetes_namespace / kubernetes_pod_name labels mirror what k8s pod
 # discovery attaches, so the same Grafana dashboards work in both setups.

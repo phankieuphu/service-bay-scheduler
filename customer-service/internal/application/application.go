@@ -69,10 +69,8 @@ func CustomerApplication(ctx context.Context) {
 	workers.Go(func() { outboxRelay.Start(workerCtx) })
 
 	// Kafka consumer
-	kafkaConsumer, err := kafka.NewConsumer(cfg.Kafka, func(ctx context.Context, key, value []byte) error {
-		logger.Info("kafka message received", "key", string(key), "value", string(value))
-		return nil
-	})
+	userEvents := handler.RegisterConsumer(cfg.Kafka.ConsumerTopic)
+	kafkaConsumer, err := kafka.NewConsumer(cfg.Kafka, userEvents.NewMessageHandler())
 	if err != nil {
 		logger.Fatal("failed to init Kafka consumer", "error", err)
 	}
@@ -91,7 +89,9 @@ func CustomerApplication(ctx context.Context) {
 
 	logger.Info("Customer Application Started")
 
-	workers.Go(func() { kafkaConsumer.Start(workerCtx) })
+	workers.Go(func() {
+		kafkaConsumer.Start(workerCtx)
+	})
 
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- httpServer.Start() }()
