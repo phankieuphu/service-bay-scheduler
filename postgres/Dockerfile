@@ -1,4 +1,4 @@
-FROM postgres:16
+FROM postgres:18
 
 COPY init/ /docker-entrypoint-initdb.d/
 COPY seed/init-customer.sql /docker-entrypoint-initdb.d/09-seed-customer.sql
