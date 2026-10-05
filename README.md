@@ -38,6 +38,7 @@ Known gaps:
 * [Responsibility Planning](docs/responsibility-planning.md)
 * Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
+* [Deploying (Railway + Vercel)](docs/railway.md)
 * [Load tests](loadtest/README.md)
 
 ---
