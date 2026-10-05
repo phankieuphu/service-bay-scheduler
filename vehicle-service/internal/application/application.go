@@ -8,13 +8,13 @@ import (
 	"vehicle-service/internal/adapters/cache"
 	database_provider "vehicle-service/internal/adapters/database/provider"
 	ginhttp "vehicle-service/internal/adapters/http"
-	"vehicle-service/internal/adapters/http/handler"
 	"vehicle-service/internal/adapters/kafka"
 	"vehicle-service/internal/adapters/repository"
 	"vehicle-service/internal/domain/services"
 	"vehicle-service/pkg/logger"
 
 	"github.com/joho/godotenv"
+	health "github.com/phankieuphu/go-health-check"
 )
 
 // outboxRelayInterval is how often the outbox table is polled for
@@ -93,12 +93,12 @@ func VehicleApplication(ctx context.Context) {
 	if err != nil {
 		logger.Fatal("failed to get database handle", "error", err)
 	}
-	health := handler.NewHealthHandler(
-		handler.HealthCheck{Name: "postgres", Critical: true, Check: sqlDB.PingContext},
-		handler.HealthCheck{Name: "kafka", Check: kafkaProducer.Ping},
-		handler.HealthCheck{Name: "redis", Check: redisCache.Ping},
-	)
-	httpServer := ginhttp.NewServer(cfg.API, entryVehicleService, health)
+	h := health.New(health.WithTimeout(2*time.Second), health.WithChecks(
+		health.Check{Name: "postgres", Critical: true, Func: sqlDB.PingContext},
+		health.Check{Name: "kafka", Func: kafkaProducer.Ping},
+		health.Check{Name: "redis", Func: redisCache.Ping},
+	))
+	httpServer := ginhttp.NewServer(cfg.API, entryVehicleService, h)
 
 	logger.Info("Vehicle Application Started")
 

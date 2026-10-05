@@ -6,7 +6,6 @@ import (
 	"identity-service/internal/adapters/cache"
 	database_provider "identity-service/internal/adapters/database/provider"
 	ginhttp "identity-service/internal/adapters/http"
-	"identity-service/internal/adapters/http/handler"
 	"identity-service/internal/adapters/kafka"
 	"identity-service/internal/adapters/repository"
 	"identity-service/internal/adapters/security"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	health "github.com/phankieuphu/go-health-check"
 )
 
 // outboxRelayInterval is how often the outbox table is polled for
@@ -83,14 +83,14 @@ func IdentityApplication(ctx context.Context) {
 	if err != nil {
 		logger.Fatal("failed to get database handle", "error", err)
 	}
-	health := handler.NewHealthHandler(
-		handler.HealthCheck{Name: "postgres", Critical: true, Check: sqlDB.PingContext},
-		handler.HealthCheck{Name: "kafka", Check: kafkaProducer.Ping},
+	h := health.New(health.WithTimeout(2*time.Second), health.WithChecks(
+		health.Check{Name: "postgres", Critical: true, Func: sqlDB.PingContext},
+		health.Check{Name: "kafka", Func: kafkaProducer.Ping},
 		// Critical here, unlike in customer/vehicle-service: Redis holds the
 		// refresh tokens, so login and refresh can't work without it.
-		handler.HealthCheck{Name: "redis", Critical: true, Check: redisCache.Ping},
-	)
-	httpServer := ginhttp.NewServer(cfg.API, entryAuthService, tokenIssuer, health)
+		health.Check{Name: "redis", Critical: true, Func: redisCache.Ping},
+	))
+	httpServer := ginhttp.NewServer(cfg.API, entryAuthService, tokenIssuer, h)
 
 	logger.Info("Identity Application Started")
 

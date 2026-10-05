@@ -11,6 +11,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	health "github.com/phankieuphu/go-health-check"
+	"github.com/phankieuphu/go-health-check/ginhealth"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -19,12 +21,12 @@ type Server struct {
 	engine     *gin.Engine
 }
 
-func NewServer(cfg config.API, accountService ports.CustomerService, health *handler.HealthHandler) *Server {
+func NewServer(cfg config.API, accountService ports.CustomerService, h *health.Handler) *Server {
 	engine := gin.New()
 	// Probes are registered before engine.Use, so they skip the middleware:
 	// kubelet hits them every few seconds, which would flood the access log
 	// and the request metrics.
-	health.RegisterRoutes(engine)
+	ginhealth.RegisterRoutes(engine, h)
 	engine.Use(gin.Logger(), gin.Recovery())
 	engine.Use(corsMiddleware())
 	engine.Use(metrics.PrometheusMiddleWare())
