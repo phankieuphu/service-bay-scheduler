@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	health "github.com/phankieuphu/go-health-check"
 )
 
 // outboxRelayInterval is how often the outbox table is polled for
@@ -80,12 +81,12 @@ func CustomerApplication(ctx context.Context) {
 	if err != nil {
 		logger.Fatal("failed to get database handle", "error", err)
 	}
-	health := handler.NewHealthHandler(
-		handler.HealthCheck{Name: "postgres", Critical: true, Check: sqlDB.PingContext},
-		handler.HealthCheck{Name: "kafka", Check: kafkaProducer.Ping},
-		handler.HealthCheck{Name: "redis", Check: redisCache.Ping},
-	)
-	httpServer := ginhttp.NewServer(cfg.API, entryCustomerService, health)
+	h := health.New(health.WithTimeout(2*time.Second), health.WithChecks(
+		health.Check{Name: "postgres", Critical: true, Func: sqlDB.PingContext},
+		health.Check{Name: "kafka", Func: kafkaProducer.Ping},
+		health.Check{Name: "redis", Func: redisCache.Ping},
+	))
+	httpServer := ginhttp.NewServer(cfg.API, entryCustomerService, h)
 
 	logger.Info("Customer Application Started")
 
