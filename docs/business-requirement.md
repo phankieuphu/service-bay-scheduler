@@ -71,6 +71,7 @@ Bill total = warranty/expiration fee (only if the vehicle's warranty has expired
 ## 9. Reporting
 
 - At the end of each day, the system produces a report for every dealership hub.
+- Managers can also analyse data across services and over time (revenue by service type, technician utilization, material margin, mid-service upsell). This is served by a Kimball data warehouse — see `data-warehouse-design.md`. Its §12 proposes the report content for open question #9 below.
 
 ## 10. Open Questions
 
@@ -84,5 +85,6 @@ These need to be clarified before the requirement can be considered final (see `
 6. **Warranty (§6)** — how is a vehicle's warranty tracked (start date + duration? per-service warranty?), and who sets it?
 7. **Skill levels (§7)** — what is a technician's starting level, is there a maximum, and does a level affect anything (e.g. eligibility for harder services, pay)?
 8. **Materials (§8)** — what happens if a hub runs out of a required material mid-service or before an appointment?
-9. **Report content (§9)** — what does the end-of-day report contain (revenue, bookings completed, materials consumed, technician utilization), and who receives it?
+9. **Report content (§9)** — what does the end-of-day report contain (revenue, bookings completed, materials consumed, technician utilization), and who receives it? A proposed KPI list is in `data-warehouse-design.md` §12.
+11. **Currency and time zone** — is all money in one currency (VND), and does every hub use `Asia/Ho_Chi_Minh` for its business day? Both decide how daily reports are cut (`data-warehouse-design.md` §10, G7–G8).
 10. **Multi-hub customers** — can one customer book the same vehicle at different hubs, and is service history shared across hubs?
