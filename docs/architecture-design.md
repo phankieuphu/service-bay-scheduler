@@ -21,6 +21,7 @@ Most of this document is the **target** design. §0 says how much of it is built
 | Redis (§7) | Used for identity-service refresh tokens and a 30 s cache of customer list pages. No availability cache yet (no scheduler-service). |
 | Kafka (§3, §7) | One broker (KRaft in Docker Compose, ZooKeeper in `k8s/`), auto-created topics. |
 | Flink | Deployed in Compose and `k8s/`, but no jobs yet. |
+| Data warehouse (§9) | Designed in `data-warehouse-design.md` (Kimball, CDC with Debezium, dbt). Not built. |
 
 ---
 
@@ -35,7 +36,7 @@ Most of this document is the **target** design. §0 says how much of it is built
 | **scheduler-service** | Booking/Appointment, a local capacity read-model (bay/technician/shift/skill snapshot) | Booking lifecycle: availability search, slot hold/confirm, cancellation, mid-service change requests. The only service that decides whether a slot is taken. |
 | **billing-service** | Bill, Payment, Deposit | Bill computation (warranty fee + service fees + material cost) and payment/deposit handling. |
 | **notification-service** | Outbox/delivery log | Delivers booking confirmations, mid-service approval prompts, bill-ready notices — email/SMS/push. Consumes the outbox topic, doesn't originate business logic. |
-| **report-service** | Daily rollups per hub (read model) | End-of-day aggregation for Dealership Managers: revenue, completed bookings, materials consumed, technician utilization. |
+| **report-service** | Daily rollups per hub (read model) | End-of-day aggregation for Dealership Managers: revenue, completed bookings, materials consumed, technician utilization. Serves the `mart_daily_hub_report` built by the data warehouse (§9) instead of computing its own rollup. |
 
 No standalone `worker` or `vehicle+material` service — see §5 and §1a for why those two ideas from the original list are folded in elsewhere.
 
@@ -299,7 +300,7 @@ Because schema-per-service can live in the same Postgres instance, it's technica
 | Bill generation (§6) | billing-service | Consumes `ServiceCompleted` |
 | Vehicle service-history update | vehicle-service | Consumes `ServiceCompleted` |
 | Held-slot expiry sweep | scheduler-service | Internal scheduled job over its own DB |
-| End-of-day report rollup | report-service | Scheduled job, reads its own accumulated event log |
+| End-of-day report rollup | data warehouse dbt job (§9) → report-service serves the result | Daily, after the last hub closes |
 | Outbox → Kafka relay | every service that writes an outbox | Internal poller per service |
 
 Each job runs inside the service that owns the data it touches. If you later want one place to *observe* all of this (retries, dead-letter queues, cron health), that's an operational dashboard over these consumers — not a service with write access to six other services' tables.
@@ -322,4 +323,15 @@ These affect service responsibilities directly and are worth resolving before fi
 - **#1 Technician assignment** — automatic-only vs. hub-overridable decides whether "assign technician" logic is entirely scheduler's, or scheduler proposes and dealership-service (hub staff) can override.
 - **#3 Mid-service approval** — whether the customer must be reached in real time changes notification-service from "fire and forget" to needing a synchronous-ish wait state on the booking (e.g., a `PENDING_APPROVAL` status with a timeout).
 - **#5 Deposit** — fixed/percentage/full affects whether billing-service or scheduler-service decides the `HELD` → `CONFIRMED` gate.
-- **#9 Report content/audience** — determines report-service's event subscriptions and whether Dealership Manager is the only consumer or if it needs an export/API for others.
+- **#9 Report content/audience** — determines report-service's event subscriptions and whether Dealership Manager is the only consumer or if it needs an export/API for others. Proposed KPIs: `data-warehouse-design.md` §12.
+
+---
+
+## 9. Analytics: the data warehouse
+
+Cross-service reporting and analysis run in a separate Kimball data warehouse (`warehouse_db`), designed in [data-warehouse-design.md](data-warehouse-design.md). The short version:
+
+- **It is the only place where data from several services is joined.** It is read-only for the business and never writes back to a service (§5's ownership rules still hold).
+- **Source: CDC.** Debezium reads each service database's WAL into `cdc.<db>.<table>` Kafka topics; a JDBC sink lands them in `warehouse_db.raw`. dbt builds `stg` → `core` (conformed dimensions and facts) → `mart`. `outbox_message` tables are not captured.
+- **What this asks of the services:** `wal_level=logical`, a read-only replication user per database, and a review of the warehouse's staging model when a migration changes a captured table. It also lists schema gaps (G1–G10 in that document) that the dealership, scheduler and billing schemas should fix before they are built — for example, marking mid-service service additions and linking material usage to the service line.
+- **report-service** serves `mart_daily_hub_report` instead of building its own rollup, so the daily report and the dashboards show the same numbers.

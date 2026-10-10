@@ -16,6 +16,9 @@ Legend: **[H]** human-led · **[AI]** AI-led · **[H+AI]** human-led, AI-assiste
 - [ ] **[H]** Compare pros/cons and choose the best version
 - [ ] **[H]** Implement the database and build a POC to validate it matches the business logic
 - [ ] **[H+AI]** Double-check with AI to validate design performance and query efficiency
+- [x] **[H+AI]** Design the analytics data warehouse (Kimball) — [data-warehouse-design.md](data-warehouse-design.md)
+- [ ] **[H]** Approve the report KPIs (§12) and the source-schema gap fixes (§10) in that document
+- [ ] **[H]** Build the warehouse in phases (§11): platform + CDC → conformed dimensions → service facts → daily report
 
 ## 3. High-Level Architecture
 
