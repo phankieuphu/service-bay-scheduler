@@ -1,0 +1,1295 @@
+{
+  "info": {
+    "name": "Service Bay",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "All HTTP APIs for Service Bay. Run Identity > Register/Login first; create/register requests store IDs (customerId, vehicleId, billId) into collection variables for later requests."
+  },
+  "item": [
+    {
+      "name": "Identity Service",
+      "description": "identity-service (:8083). Auth + JWT issuing.",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{identityUrl}}/api/v1/auth/register",
+              "host": [
+                "{{identityUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Role: CUSTOMER (default) | TECHNICIAN | MANAGER | ADMIN. Password 8-72 chars.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"role\": \"CUSTOMER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('userId', j.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{identityUrl}}/api/v1/auth/login",
+              "host": [
+                "{{identityUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Stores accessToken / refreshToken in collection variables.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }",
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.refresh_token !== undefined) pm.collectionVariables.set('refreshToken', j.refresh_token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{identityUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{identityUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Rotates the token pair.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }",
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.refresh_token !== undefined) pm.collectionVariables.set('refreshToken', j.refresh_token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{identityUrl}}/api/v1/me",
+              "host": [
+                "{{identityUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Requires Authorization: Bearer <access token>.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{identityUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{identityUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the refresh token. 204 on success.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Ops",
+          "item": [
+            {
+              "name": "Liveness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{identityUrl}}/healthz",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "healthz"
+                  ]
+                },
+                "description": "Liveness probe (go-health-check).",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Readiness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{identityUrl}}/readyz",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "readyz"
+                  ]
+                },
+                "description": "Readiness probe: checks Postgres/Kafka/Redis dependencies.",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Prometheus metrics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{identityUrl}}/metrics",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "metrics"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customer Service",
+      "description": "customer-service (:8080).",
+      "item": [
+        {
+          "name": "Create customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{customerUrl}}/api/v1/customer",
+              "host": [
+                "{{customerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customer"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.{{$timestamp}}@example.com\",\n  \"phone\": \"+84901234567\",\n  \"birth_day\": \"1990-05-20T00:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('customerId', j.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{customerUrl}}/api/v1/customer?limit=20&cursor=0",
+              "host": [
+                "{{customerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customer"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Page size (0 = server default)"
+                },
+                {
+                  "key": "cursor",
+                  "value": "0",
+                  "description": "next_cursor from previous page"
+                }
+              ]
+            },
+            "description": "Cursor-paginated.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{customerUrl}}/api/v1/customer/{{customerId}}",
+              "host": [
+                "{{customerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customer",
+                "{{customerId}}"
+              ]
+            },
+            "description": "Stores updated_at for optimistic-lock on Update.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.updated_at !== undefined) pm.collectionVariables.set('customerUpdatedAt', j.updated_at); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update customer profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{customerUrl}}/api/v1/customer/{{customerId}}",
+              "host": [
+                "{{customerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customer",
+                "{{customerId}}"
+              ]
+            },
+            "description": "updated_at must match the last read value, otherwise 409.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Updated\",\n  \"birth_day\": \"1990-05-20T00:00:00Z\",\n  \"updated_at\": \"{{customerUpdatedAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Delete customer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{customerUrl}}/api/v1/customer/{{customerId}}",
+              "host": [
+                "{{customerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customer",
+                "{{customerId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Ops",
+          "item": [
+            {
+              "name": "Liveness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{customerUrl}}/healthz",
+                  "host": [
+                    "{{customerUrl}}"
+                  ],
+                  "path": [
+                    "healthz"
+                  ]
+                },
+                "description": "Liveness probe (go-health-check).",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Readiness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{customerUrl}}/readyz",
+                  "host": [
+                    "{{customerUrl}}"
+                  ],
+                  "path": [
+                    "readyz"
+                  ]
+                },
+                "description": "Readiness probe: checks Postgres/Kafka/Redis dependencies.",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Prometheus metrics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{customerUrl}}/metrics",
+                  "host": [
+                    "{{customerUrl}}"
+                  ],
+                  "path": [
+                    "metrics"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Vehicle Service",
+      "description": "vehicle-service (:8081).",
+      "item": [
+        {
+          "name": "Register vehicle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle"
+              ]
+            },
+            "description": "status: ACTIVE (default) | SOLD | SCRAPPED. VIN/plate normalized server-side.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vin\": \"{{randomVin}}\",\n  \"license_plate\": \"51A-123.45\",\n  \"vehicle_model_id\": 1,\n  \"warranty_end_date\": \"2028-12-31T00:00:00Z\",\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const c = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';",
+                  "let v = ''; for (let i = 0; i < 17; i++) v += c[Math.floor(Math.random() * c.length)];",
+                  "pm.collectionVariables.set('randomVin', v);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('vehicleId', j.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List vehicles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle?limit=20&cursor=0",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": ""
+                },
+                {
+                  "key": "cursor",
+                  "value": "0",
+                  "description": ""
+                },
+                {
+                  "key": "vin",
+                  "value": "",
+                  "description": "Filter by VIN",
+                  "disabled": true
+                },
+                {
+                  "key": "plate",
+                  "value": "",
+                  "description": "Filter by license plate",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "description": "ACTIVE | SOLD | SCRAPPED",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Cursor-paginated with optional filters.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get vehicle",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle/{{vehicleId}}",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle",
+                "{{vehicleId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.updated_at !== undefined) pm.collectionVariables.set('vehicleUpdatedAt', j.updated_at); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update vehicle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle/{{vehicleId}}",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle",
+                "{{vehicleId}}"
+              ]
+            },
+            "description": "Omitted fields unchanged. updated_at must match last read value, otherwise 409.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\",\n  \"warranty_end_date\": \"2029-12-31T00:00:00Z\",\n  \"updated_at\": \"{{vehicleUpdatedAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Assign initial owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle/{{vehicleId}}/owner",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle",
+                "{{vehicleId}}",
+                "owner"
+              ]
+            },
+            "description": "Optional \"date\" (RFC3339) \u2014 defaults to today, cannot be in the future.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customerId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Transfer vehicle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/transfer",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transfer"
+              ]
+            },
+            "description": "Optional \"date\" (RFC3339). Row-locked: concurrent transfers serialize.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": {{vehicleId}},\n  \"from\": {{customerId}},\n  \"to\": {{targetCustomerId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get customer vehicles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/customers/{{customerId}}/vehicles",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "{{customerId}}",
+                "vehicles"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get warranty",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle/{{vehicleId}}/warranty",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle",
+                "{{vehicleId}}",
+                "warranty"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-10-10",
+                  "description": "YYYY-MM-DD; defaults to today",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get service history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle/{{vehicleId}}/history?limit=50",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle",
+                "{{vehicleId}}",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Default 50, max 200"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get vehicle materials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{vehicleUrl}}/api/v1/vehicle/{{vehicleId}}/materials",
+              "host": [
+                "{{vehicleUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vehicle",
+                "{{vehicleId}}",
+                "materials"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Ops",
+          "item": [
+            {
+              "name": "Liveness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{vehicleUrl}}/healthz",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "healthz"
+                  ]
+                },
+                "description": "Liveness probe (go-health-check).",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Readiness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{vehicleUrl}}/readyz",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "readyz"
+                  ]
+                },
+                "description": "Readiness probe: checks Postgres/Kafka/Redis dependencies.",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Prometheus metrics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{vehicleUrl}}/metrics",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "metrics"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Billing Service",
+      "description": "billing_service (Spring Boot, :8084).",
+      "item": [
+        {
+          "name": "Create bill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills"
+              ]
+            },
+            "description": "appointmentId/customerId/vehicleId required; fees must be non-negative.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": 1,\n  \"customerId\": {{customerId}},\n  \"vehicleId\": {{vehicleId}},\n  \"warrantyFee\": 0,\n  \"serviceFee\": 500000,\n  \"materialCost\": 250000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('billId', j.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get bill",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "List bills by customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills?customerId={{customerId}}",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills"
+              ],
+              "query": [
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Record payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}",
+                "payments"
+              ]
+            },
+            "description": "type: DEPOSIT | FINAL. amount > 0.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"DEPOSIT\",\n  \"method\": \"CASH\",\n  \"amount\": 100000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "List payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}",
+                "payments"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Void bill",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/void",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}",
+                "void"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Ops",
+          "item": [
+            {
+              "name": "Actuator health",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/actuator/health",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Actuator info",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/actuator/info",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "info"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "identityUrl",
+      "value": "http://localhost:8083",
+      "type": "string"
+    },
+    {
+      "key": "customerUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "vehicleUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "billingUrl",
+      "value": "http://localhost:8084",
+      "type": "string"
+    },
+    {
+      "key": "userEmail",
+      "value": "dev@example.com",
+      "type": "string"
+    },
+    {
+      "key": "userPassword",
+      "value": "Passw0rd!",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "targetCustomerId",
+      "value": "2",
+      "type": "string"
+    },
+    {
+      "key": "vehicleId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "billId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "customerUpdatedAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "randomVin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "vehicleUpdatedAt",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
