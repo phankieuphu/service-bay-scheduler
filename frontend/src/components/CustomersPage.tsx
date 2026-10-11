@@ -8,6 +8,7 @@ import {
 } from '../api/customer'
 import { CreateCustomer } from './CreateCustomer'
 import { CustomerDetail } from './CustomerDetail'
+import { PageHeader } from './PageHeader'
 
 const PAGE_SIZE = 10
 
@@ -96,105 +97,111 @@ export function CustomersPage({ onOpenVehicle }: { onOpenVehicle: (vehicleId: nu
   }
 
   return (
-    <div className="two-col">
-      <section className="panel stack" aria-labelledby="customers-heading">
-        <div className="panel-header">
-          <h2 id="customers-heading">Customers</h2>
-          <form className="inline-form" onSubmit={handleLookup}>
-            <label htmlFor="customer-lookup-id" className="visually-hidden">
-              Customer ID
-            </label>
-            <input
-              id="customer-lookup-id"
-              type="number"
-              min={1}
-              value={lookupId}
-              onChange={(e) => setLookupId(e.target.value)}
-              placeholder="Look up by ID"
-            />
-            <button type="submit">Look up</button>
-          </form>
-        </div>
-
-        {error && <p className="message error flush">{error}</p>}
-        {notice && <p className="message success flush">{notice}</p>}
-
-        <div className="row-list customers" role="list" aria-label="Customers">
-          <div className="row-head" aria-hidden="true">
-            <span>ID</span>
-            <span>Name</span>
-            <span>Email</span>
-            <span>Status</span>
+    <div className="stack roomy">
+      <PageHeader
+        title="Customers"
+        description="Look up, create and edit customer profiles, and see the vehicles each one owns."
+      />
+      <div className="two-col">
+        <section className="card stack" aria-labelledby="customers-heading">
+          <div className="panel-header">
+            <h2 id="customers-heading">All customers</h2>
+            <form className="inline-form" onSubmit={handleLookup}>
+              <label htmlFor="customer-lookup-id" className="visually-hidden">
+                Customer ID
+              </label>
+              <input
+                id="customer-lookup-id"
+                type="number"
+                min={1}
+                value={lookupId}
+                onChange={(e) => setLookupId(e.target.value)}
+                placeholder="Look up by ID"
+              />
+              <button type="submit">Look up</button>
+            </form>
           </div>
-          {customers.map((customer) => (
-            <div role="listitem" key={customer.id}>
+
+          {error && <p className="message error flush">{error}</p>}
+          {notice && <p className="message success flush">{notice}</p>}
+
+          <div className="row-list customers" role="list" aria-label="Customers">
+            <div className="row-head" aria-hidden="true">
+              <span>ID</span>
+              <span>Name</span>
+              <span>Email</span>
+              <span>Status</span>
+            </div>
+            {customers.map((customer) => (
+              <div role="listitem" key={customer.id}>
+                <button
+                  type="button"
+                  className={`row${selected?.id === customer.id ? ' selected' : ''}`}
+                  aria-pressed={selected?.id === customer.id}
+                  onClick={() => select(customer)}
+                >
+                  <span>{customer.id}</span>
+                  <span>{customer.name}</span>
+                  <span className="truncate">{customer.email}</span>
+                  <span>
+                    <span className={`badge badge-${customer.status.toLowerCase()}`}>
+                      {customer.status}
+                    </span>
+                  </span>
+                </button>
+              </div>
+            ))}
+            {!loading && customers.length === 0 && <p className="muted empty">No customers yet.</p>}
+          </div>
+
+          <div className="actions">
+            {nextCursor !== null && (
               <button
                 type="button"
-                className={`row${selected?.id === customer.id ? ' selected' : ''}`}
-                aria-pressed={selected?.id === customer.id}
-                onClick={() => select(customer)}
+                className="secondary"
+                disabled={loading}
+                onClick={() => loadPage(nextCursor)}
               >
-                <span>{customer.id}</span>
-                <span>{customer.name}</span>
-                <span className="truncate">{customer.email}</span>
-                <span>
-                  <span className={`badge badge-${customer.status.toLowerCase()}`}>
-                    {customer.status}
-                  </span>
-                </span>
+                {loading ? 'Loading…' : 'Load more'}
               </button>
-            </div>
-          ))}
-          {!loading && customers.length === 0 && <p className="muted empty">No customers yet.</p>}
-        </div>
-
-        <div className="actions">
-          {nextCursor !== null && (
+            )}
             <button
               type="button"
               className="secondary"
               disabled={loading}
-              onClick={() => loadPage(nextCursor)}
+              onClick={() => loadPage(0)}
             >
-              {loading ? 'Loading…' : 'Load more'}
+              Refresh
             </button>
-          )}
-          <button
-            type="button"
-            className="secondary"
-            disabled={loading}
-            onClick={() => loadPage(0)}
-          >
-            Refresh
-          </button>
-          <button
-            type="button"
-            className="secondary push-right"
-            onClick={() => {
-              select(null)
-              setCreating(true)
-            }}
-          >
-            New customer
-          </button>
-        </div>
-      </section>
-
-      {creating ? (
-        <CreateCustomer onCreated={handleCreated} onCancel={() => setCreating(false)} />
-      ) : selected ? (
-        <CustomerDetail
-          key={selected.id}
-          customer={selected}
-          onUpdated={handleUpdated}
-          onDeleted={handleDeleted}
-          onOpenVehicle={onOpenVehicle}
-        />
-      ) : (
-        <section className="card placeholder">
-          <p className="muted">Select a customer to see their details and vehicles.</p>
+            <button
+              type="button"
+              className="secondary push-right"
+              onClick={() => {
+                select(null)
+                setCreating(true)
+              }}
+            >
+              New customer
+            </button>
+          </div>
         </section>
-      )}
+
+        {creating ? (
+          <CreateCustomer onCreated={handleCreated} onCancel={() => setCreating(false)} />
+        ) : selected ? (
+          <CustomerDetail
+            key={selected.id}
+            customer={selected}
+            onUpdated={handleUpdated}
+            onDeleted={handleDeleted}
+            onOpenVehicle={onOpenVehicle}
+          />
+        ) : (
+          <section className="card placeholder">
+            <p className="muted">Select a customer to see their details and vehicles.</p>
+          </section>
+        )}
+      </div>
     </div>
   )
 }

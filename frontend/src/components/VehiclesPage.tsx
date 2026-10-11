@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Vehicle } from '../api/vehicle'
 import { RegisterVehicle } from './RegisterVehicle'
+import { PageHeader } from './PageHeader'
 import { Tabs } from './Tabs'
 import { VehicleDetail } from './VehicleDetail'
 import { VehicleSearch } from './VehicleSearch'
@@ -20,7 +21,11 @@ export function VehiclesPage({ initialVehicleId }: { initialVehicleId: number | 
   }
 
   return (
-    <div className="stack">
+    <div className="stack roomy">
+      <PageHeader
+        title="Vehicles"
+        description="Search the registry, check warranty and service records, and assign or transfer owners."
+      />
       <Tabs
         className="subtabs"
         tabs={[

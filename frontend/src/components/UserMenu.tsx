@@ -8,6 +8,9 @@ export function UserMenu({ user }: { user: User }) {
 
   return (
     <div className="user-menu">
+      <span className="avatar" aria-hidden="true">
+        {user.email.slice(0, 2).toUpperCase()}
+      </span>
       <span className="user-email" title={user.email}>
         {user.email}
       </span>

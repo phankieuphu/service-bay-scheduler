@@ -1,7 +1,32 @@
+/* The signed-in shell: a full-width header bar over a centred content
+   column, as in the Service Bay design canvas. */
 .app {
-  max-width: 1280px;
+  min-height: 100svh;
+}
+
+/* 1280px of content plus the side padding, so it lines up with the header. */
+.app-main {
+  max-width: 1344px;
   margin: 0 auto;
-  padding: 32px 16px 64px;
+  padding: 32px 32px 64px;
+}
+
+@media (max-width: 560px) {
+  .app-main {
+    padding: 24px 16px 48px;
+  }
+}
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
 }
 
 /* ---------- layout ---------- */
@@ -32,7 +57,7 @@
 .panel,
 .card {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 24px;
 }
 
@@ -44,7 +69,8 @@
   background: var(--bg);
 }
 
-.panel.narrow {
+.panel.narrow,
+.card.narrow {
   max-width: 640px;
 }
 
@@ -55,6 +81,8 @@
 }
 
 .placeholder {
+  border-style: dashed;
+  border-color: var(--dashed);
   display: grid;
   place-items: center;
   min-height: 160px;
@@ -77,10 +105,14 @@
 /* ---------- header & navigation ---------- */
 
 .app-header {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+}
+
+.header-bar,
+.app-header .tabs {
+  max-width: 1280px;
+  margin: 0 auto;
 }
 
 .header-bar {
@@ -89,6 +121,13 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  padding: 16px 0 8px;
+}
+
+@media (max-width: 560px) {
+  .app-header {
+    padding: 0 16px;
+  }
 }
 
 .brand {
@@ -106,41 +145,35 @@
 
 .brand-name {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .tabs {
   display: flex;
-  gap: 24px;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
   overflow-x: auto;
-}
-
-.tabs button {
-  white-space: nowrap;
-}
-
-.brand-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .tabs button {
   background: none;
   border: none;
-  padding: 10px 2px;
+  padding: 12px 14px;
   font: inherit;
   font-size: 15px;
+  white-space: nowrap;
   color: var(--text-muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
 }
 
-.tabs button.active {
+.tabs button:hover {
   color: var(--text);
+}
+
+.tabs button.active {
+  color: var(--accent);
   border-bottom-color: var(--accent);
   font-weight: 600;
 }
@@ -153,12 +186,19 @@
 .subtabs button {
   font: inherit;
   font-size: 14px;
-  padding: 7px 16px;
+  font-weight: 600;
+  min-height: 40px;
+  padding: 8px 16px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: none;
   color: var(--text-muted);
   cursor: pointer;
+}
+
+.subtabs button:hover:not(.active) {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .subtabs button.active {
@@ -175,6 +215,20 @@
   font-size: 14px;
 }
 
+.avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--neutral-bg);
+  color: var(--neutral);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .user-email {
   color: var(--text-muted);
   overflow: hidden;
@@ -187,7 +241,8 @@
 
 .app.auth {
   max-width: 492px;
-  padding-top: 56px;
+  margin: 0 auto;
+  padding: 56px 16px 64px;
 }
 
 .auth-header {
@@ -269,14 +324,24 @@ label,
 }
 
 input,
-select {
+select,
+textarea {
   font: inherit;
-  padding: 9px 10px;
+  min-height: 44px;
+  padding: 9px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg);
   color: var(--text);
   width: 100%;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
 }
 
 input.invalid {
@@ -318,7 +383,7 @@ input.invalid {
 .inset {
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--panel-bg);
 }
 
@@ -375,10 +440,11 @@ input.invalid {
 button[type='submit'],
 button.primary {
   font: inherit;
-  min-height: 40px;
-  padding: 9px 18px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 9px 20px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--accent);
   color: var(--accent-contrast);
   cursor: pointer;
@@ -398,23 +464,34 @@ button.align-start {
 
 button.secondary,
 button.danger {
+  white-space: nowrap;
   font: inherit;
   font-size: 14px;
-  padding: 7px 14px;
-  border-radius: 6px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
 /* In a form, a secondary submit (e.g. "Check") keeps the outlined style. */
 button[type='submit'].secondary {
-  min-height: 0;
-  padding: 8px 14px;
+  min-height: 40px;
+  padding: 8px 16px;
 }
 
 button.secondary {
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
+}
+
+button.secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button[type='submit']:hover:not(:disabled),
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 button.danger {
@@ -445,7 +522,7 @@ button.danger:disabled {
 .message {
   margin-top: 16px;
   padding: 10px 14px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
 }
 
@@ -581,9 +658,13 @@ p.flush {
   cursor: pointer;
 }
 
-.row:hover,
+.row:hover {
+  background: var(--panel-bg);
+}
+
 .row.selected {
-  background: var(--bg);
+  background: var(--accent-tint);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .row-list .empty {
@@ -665,14 +746,14 @@ p.flush {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
 }
 
 .subsection .item-list .item {
-  background: var(--panel-bg);
+  background: var(--bg);
 }
 
 .item-main {
@@ -756,7 +837,7 @@ p.flush {
   min-height: 44px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg);
   cursor: pointer;
   color: var(--text);
@@ -764,6 +845,8 @@ p.flush {
 
 .segmented label.active {
   border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
   font-weight: 600;
 }
 
