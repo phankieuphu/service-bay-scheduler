@@ -22,6 +22,10 @@
 //
 // Usage:
 //   k6 run scripts/k6/transfer-benchmark.js
+// ACCESS_TOKEN must be a staff identity-service access token, e.g.
+//   -e ACCESS_TOKEN=$(curl -s -XPOST localhost:8083/api/v1/auth/login \
+//       -d '{"email":"admin@servicebay.local","password":"admin-local-dev-pass"}' | jq -r .access_token)
+//
 //   k6 run -e BASE_URL=http://localhost:8081 -e VUS=20 -e DURATION=60s \
 //          -e VEHICLE_ID_START=1000 -e CUSTOMER_A=101 -e CUSTOMER_B=104 \
 //          scripts/k6/transfer-benchmark.js
@@ -84,7 +88,7 @@ export default function () {
   });
 
   const res = http.post(`${BASE_URL}/api/v1/transfer`, payload, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${__ENV.ACCESS_TOKEN || ''}` },
     tags: { name: 'TransferVehicle' },
   });
 

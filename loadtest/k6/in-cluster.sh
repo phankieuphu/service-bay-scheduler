@@ -36,6 +36,9 @@ fi
 shift
 
 k8s_preflight || die "preflight failed; fix the cluster or set ALLOW_PENDING=1"
+# Logs in from this machine, so IDENTITY_URL must be reachable from here
+# (e.g. the NodePort, http://localhost:30083, or a port-forward).
+ensure_access_token
 [ "$SCENARIO" = smoke ] || reset_transfer_pool
 
 RESULTS_DIR="${RESULTS_DIR:-$LOADTEST_DIR/results}"
@@ -60,7 +63,7 @@ kube create configmap loadtest-k6 "${cm_args[@]}" --dry-run=client -o yaml \
 
 # Same variables run.sh passes with -e; k6 reads them from the pod env.
 env_yaml=""
-for var in CUSTOMER_URL VEHICLE_URL TIER MIX \
+for var in CUSTOMER_URL VEHICLE_URL ACCESS_TOKEN TIER MIX \
   CUSTOMER_ID_MIN CUSTOMER_ID_MAX LT_CUSTOMER_MIN LT_CUSTOMER_MAX VEHICLE_ID_MIN VEHICLE_ID_MAX \
   TRANSFER_VEHICLE_START TRANSFER_POOL TRANSFER_CUSTOMER_A TRANSFER_CUSTOMER_B SMOKE_VEHICLE_ID \
   RATE DURATION RAMP MAX_RATE STEPS STEP_DURATION BASE_RATE SPIKE_RATE PEAK_DURATION RECOVERY_DURATION \

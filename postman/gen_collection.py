@@ -74,7 +74,15 @@ identity = {"name": "Identity Service", "description": "identity-service (:8083)
     ops("identityUrl"),
 ]}
 
-customer = {"name": "Customer Service", "description": "customer-service (:8080).", "item": [
+def with_auth(group):
+    """Bearer-auth every request in group except the Ops folder (probes and
+    /metrics need no token)."""
+    for item in group["item"]:
+        if "request" in item:
+            item["request"]["auth"] = {"type": "bearer", "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]}
+    return group
+
+customer = {"name": "Customer Service", "description": "customer-service (:8080). Needs a staff access token (log in as the bootstrap admin); DELETE needs MANAGER or ADMIN.", "item": [
     req("Create customer", "POST", "customerUrl", "/api/v1/customer",
         {"name": "Jane Doe", "email": "jane.{{$timestamp}}@example.com", "phone": "+84901234567", "birth_day": "1990-05-20T00:00:00Z"},
         tests=save("customerId", "j.id")),
@@ -91,7 +99,7 @@ customer = {"name": "Customer Service", "description": "customer-service (:8080)
     ops("customerUrl"),
 ]}
 
-vehicle = {"name": "Vehicle Service", "description": "vehicle-service (:8081).", "item": [
+vehicle = {"name": "Vehicle Service", "description": "vehicle-service (:8081). Needs an access token; writes need a staff role.", "item": [
     req("Register vehicle", "POST", "vehicleUrl", "/api/v1/vehicle",
         {"vin": "{{randomVin}}", "license_plate": "51A-123.45", "vehicle_model_id": 1, "warranty_end_date": "2028-12-31T00:00:00Z", "status": "ACTIVE"},
         desc="status: ACTIVE (default) | SOLD | SCRAPPED. VIN/plate normalized server-side.",
@@ -143,7 +151,7 @@ def var(k, v): return {"key": k, "value": v, "type": "string"}
 coll = {
     "info": {"name": "Service Bay", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
              "description": "All HTTP APIs for Service Bay. Run Identity > Register/Login first; create/register requests store IDs (customerId, vehicleId, billId) into collection variables for later requests."},
-    "item": [identity, customer, vehicle, billing],
+    "item": [identity, with_auth(customer), with_auth(vehicle), billing],
     "variable": [var("identityUrl", "http://localhost:8083"), var("customerUrl", "http://localhost:8080"),
                  var("vehicleUrl", "http://localhost:8081"), var("billingUrl", "http://localhost:8084"),
                  var("userEmail", "dev@example.com"), var("userPassword", "Passw0rd!"),

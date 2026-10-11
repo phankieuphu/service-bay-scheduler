@@ -9,6 +9,12 @@ const int = (name, def) => {
 export const CUSTOMER_URL = __ENV.CUSTOMER_URL || 'http://localhost:8080';
 export const VEHICLE_URL = __ENV.VEHICLE_URL || 'http://localhost:8081';
 
+// identity-service access token for a staff user; k6/run.sh logs in and
+// passes it. It expires after identity-service's JWT_ACCESS_TTL_SEC (15 min
+// by default), so raise that for longer runs.
+export const ACCESS_TOKEN = __ENV.ACCESS_TOKEN || '';
+if (!ACCESS_TOKEN) console.warn('ACCESS_TOKEN not set: every API request will get 401 (use k6/run.sh, or pass -e ACCESS_TOKEN=...)');
+
 // Id ranges written by seed/seed.sh. The fallbacks match postgres/seed/*.sql;
 // without a seeded transfer pool, transfers are replaced by vehicle reads.
 export const SEED = {
