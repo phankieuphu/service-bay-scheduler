@@ -1,6 +1,6 @@
 # AI Agents
 
-The repository runs four AI agent workflows on GitHub Actions. They review pull requests and label issues and PRs. All of them are built with [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (gh-aw, v0.89.21) and use the **Claude** engine.
+The repository runs four AI agent workflows on GitHub Actions. They review pull requests and label issues and PRs. All of them are built with [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (gh-aw, v0.89.21) and use the default **Copilot** engine, billed to the token owner's GitHub Copilot plan.
 
 None of them can push code, merge, approve, or close anything. Each one can only post the comments and labels listed below.
 
@@ -90,7 +90,7 @@ Every comment must describe a concrete failure scenario and be attached to a cha
 
 The review is submitted as **Request changes** only for a confirmed bug that would cause incorrect behavior, data loss, or a security problem in production. Otherwise it is a **Comment**. A newer review replaces the older one. If a PR touches only docs or generated files, the workflow posts nothing; a `/review` request still gets a short "No issues found".
 
-Because the engine is Claude Code, the agent also reads [`CLAUDE.md`](../CLAUDE.md) for the repo's conventions.
+The Copilot CLI also loads the repository's custom instructions, such as [`AGENTS.md`](../AGENTS.md), so the agent sees the repo's conventions.
 
 ---
 
@@ -107,7 +107,7 @@ Every run goes through these jobs:
 
 1. **pre_activation:** checks the actor's role, skips bots, and, for `/review`, checks that the comment starts with the command.
 2. **activation:** builds the prompt. The `.md` body is loaded when the run starts, not copied into the lock file, so expression errors in it only show up here (§6). Recompile after any edit anyway; this job also checks that the lock file matches its source.
-3. **agent:** runs Claude Code in a sandbox behind a network firewall, with **read-only** access to `contents`, `issues`, and `pull-requests`. It reads GitHub data with `gh`. `ANTHROPIC_API_KEY` is kept out of the sandbox; only gh-aw's API proxy uses it.
+3. **agent:** runs the GitHub Copilot CLI in a sandbox behind a network firewall, with **read-only** access to `contents`, `issues`, and `pull-requests`. It reads GitHub data with `gh`. The model credential is kept out of the sandbox; only gh-aw's API proxy uses it.
 4. **detection:** a second model pass that screens the agent's proposed output for prompt injection, secret leaks, and malicious content.
 5. **safe_outputs:** the only job with write permission. It applies the comments, labels, and reviews the agent asked for, enforced against the allowlists and limits in the frontmatter (`safe-outputs:`).
 
@@ -140,11 +140,13 @@ Rules learned the hard way:
 
 | Requirement | How |
 |---|---|
-| `ANTHROPIC_API_KEY` repository secret | Create a key in the [Anthropic Console](https://console.anthropic.com/), then run `gh aw secrets set ANTHROPIC_API_KEY` and paste it when prompted. Don't use `--value`, which saves the key in your shell history. |
+| `COPILOT_GITHUB_TOKEN` repository secret | A **fine-grained** PAT ([create one, prefilled](https://github.com/settings/personal-access-tokens/new?name=COPILOT_GITHUB_TOKEN&user_copilot_requests=read)): resource owner is **your user account**, and **Account permissions → Copilot Requests: Read**. The owner needs an active paid Copilot plan (Pro or Pro+; see [settings/copilot](https://github.com/settings/copilot)). Copy it, then run `pbpaste \| gh aw secrets set COPILOT_GITHUB_TOKEN`, or set it under Settings → Secrets and variables → Actions. Don't use `--value`, which saves the token in your shell history. |
 | Actions enabled | Settings → Actions → General: allow GitHub Actions, including `github/gh-aw-actions/*` and the pinned `actions/*`. |
 | Labels (optional) | GitHub creates missing labels in grey on first use. Create them up front with `gh label create "quality: good" --color 0e8a16` and so on to choose colours. |
 
-The workflows write through the default `GITHUB_TOKEN`; no PAT is needed. `COPILOT_GITHUB_TOKEN` is no longer used. The one remaining reference in the lock files is a generated check that rejects the wrong kind of token.
+The token is used only to call the model. Comments and labels are written through the default `GITHUB_TOKEN`. OAuth tokens (`gho_…`, e.g. from `gh auth token`) are rejected at startup.
+
+To use Claude instead, add `engine: claude` to all four main workflows, set an `ANTHROPIC_API_KEY` secret, and recompile with `--approve`. The key must be created **inside a Console workspace**: a key without a workspace fails with *"not scoped to a workspace"*. API use needs prepaid Anthropic credits, separate from a claude.ai subscription.
 
 ---
 
@@ -155,8 +157,8 @@ Open the run under **Actions**, or run `gh run view <id> --log-failed`.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `activation` fails at *Interpolate variables and render templates* with "unauthorized GitHub Actions expressions" | A compound or conditional `${{ }}` in the prompt body | Use only plain or `a \|\| b` expressions (§6) |
-| `agent` fails at *Validate ANTHROPIC_API_KEY secret* | Secret missing or empty | Set it (§7) |
-| `agent` fails with a 401 or 403 from the API proxy | Key revoked, out of credit, or from the wrong org/workspace | Create a new key and reset the secret, then `gh run rerun <id> --failed` |
+| `activation` fails at *Validate COPILOT_GITHUB_TOKEN secret* | Secret missing or empty | Set it (§7) |
+| `agent` fails at *Execute GitHub Copilot CLI* with "models fetch returned 401" and "model alias resolution failed" | The token was rejected: it isn't fine-grained, lacks **Copilot Requests: Read**, is owned by an org, has expired, or its owner has no Copilot plan | Create a new token (§7), reset the secret, then `gh run rerun <id> --failed`. Test locally: `COPILOT_GITHUB_TOKEN=<pat> copilot -p "hi"` |
 | Code review run is green but `agent` was **skipped** | `pre_activation` decided not to run: draft PR, bot author, actor without write access, or a comment that doesn't start with `/review` | Mark the PR ready, or comment `/review` |
 | No run after pushing new commits | Expected: these workflows don't trigger on pushes | Comment `/review`, or close and reopen the PR |
 | Compile warns "safe update mode detected unapproved changes" | A new secret or action was added | Review it, then compile with `--approve` (§6) |
