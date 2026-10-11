@@ -35,6 +35,7 @@ Known gaps:
 * [Business Requirement](docs/business-requirement.md)
 * [Architecture Design](docs/architecture-design.md): service map, event contracts, data ownership, and what's built so far (§0)
 * [Technical Requirement](docs/technical-requirement.md): scale and HA targets, and today's stack (§1a)
+* [Data Warehouse Design](docs/data-warehouse-design.md): Kimball bus matrix, star schemas, CDC + dbt load plan, sizing per tier
 * [Responsibility Planning](docs/responsibility-planning.md)
 * Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
