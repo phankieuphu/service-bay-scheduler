@@ -183,7 +183,7 @@ services:
 
   # Metrics exporters for the stateful infra (scraped by prometheus/prometheus.yml).
   postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     container_name: postgres-exporter
     depends_on:
       postgres:
