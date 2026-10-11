@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 	"vehicle-service/config"
@@ -101,6 +102,38 @@ func TestVehicleService_UpdateVehicle(t *testing.T) {
 		}
 	})
 
+	t.Run("clearing the warranty stores NULL and emits WarrantyChanged with a null date", func(t *testing.T) {
+		h := setup(t, current)
+		if _, err := h.svc.UpdateVehicle(context.Background(), 5, entity.VehicleUpdate{ClearWarranty: true, UpdatedAt: readAt}); err != nil {
+			t.Fatalf("UpdateVehicle: %v", err)
+		}
+		if h.updated.WarrantyEndDate != nil {
+			t.Errorf("stored warranty %v, want nil", h.updated.WarrantyEndDate)
+		}
+		var wc events.VehicleEvent[events.WarrantyChange]
+		if err := json.Unmarshal(h.events[constants.WarrantyChanged], &wc); err != nil {
+			t.Fatalf("WarrantyChanged: %v", err)
+		}
+		if wc.Vehicle.WarrantyEndDate != nil || wc.Vehicle.PreviousWarrantyEndDate == nil || *wc.Vehicle.PreviousWarrantyEndDate != "2027-01-31" {
+			t.Errorf("unexpected WarrantyChanged %+v", wc.Vehicle)
+		}
+		if raw := string(h.events[constants.WarrantyChanged]); !strings.Contains(raw, `"warranty_end_date":null`) {
+			t.Errorf("payload should carry an explicit null warranty_end_date: %s", raw)
+		}
+	})
+
+	t.Run("clearing an absent warranty is a no-op", func(t *testing.T) {
+		noWarranty := current
+		noWarranty.WarrantyEndDate = nil
+		h := setup(t, noWarranty)
+		if _, err := h.svc.UpdateVehicle(context.Background(), 5, entity.VehicleUpdate{ClearWarranty: true, UpdatedAt: readAt}); err != nil {
+			t.Fatal(err)
+		}
+		if h.updated != nil || len(h.events) != 0 {
+			t.Error("clearing a warranty that isn't there should not write the row or emit events")
+		}
+	})
+
 	t.Run("no-op update writes nothing", func(t *testing.T) {
 		h := setup(t, current)
 		same := oldWarranty
@@ -130,6 +163,7 @@ func TestVehicleService_UpdateVehicle(t *testing.T) {
 		{"nothing to update", current, 5, entity.VehicleUpdate{UpdatedAt: readAt}, ports.ErrInvalidInput},
 		{"unknown status", current, 5, entity.VehicleUpdate{Status: status("STOLEN"), UpdatedAt: readAt}, ports.ErrInvalidInput},
 		{"missing updated_at", current, 5, entity.VehicleUpdate{Status: status(constants.StatusSold)}, ports.ErrInvalidInput},
+		{"set and clear warranty together", current, 5, entity.VehicleUpdate{WarrantyEndDate: &oldWarranty, ClearWarranty: true, UpdatedAt: readAt}, ports.ErrInvalidInput},
 	}
 	for _, tt := range errCases {
 		t.Run(tt.name, func(t *testing.T) {
