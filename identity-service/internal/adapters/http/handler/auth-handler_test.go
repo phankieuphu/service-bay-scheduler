@@ -57,7 +57,7 @@ func (mockTokens) ParseAccessToken(token string) (entity.AccessClaims, error) {
 func newTestRouter(svc ports.AuthService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	NewAuthHandler(svc, mockTokens{}).RegisterRoutes(r.Group("/api/v1"))
+	NewAuthHandler(svc, mockTokens{}, nil).RegisterRoutes(r.Group("/api/v1"))
 	return r
 }
 
