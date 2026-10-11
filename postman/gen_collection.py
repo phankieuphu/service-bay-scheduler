@@ -111,29 +111,12 @@ vehicle = {"name": "Vehicle Service", "description": "vehicle-service (:8081).",
     ops("vehicleUrl"),
 ]}
 
-billing = {"name": "Billing Service", "description": "billing_service (Spring Boot, :8084).", "item": [
-    req("Create bill", "POST", "billingUrl", "/api/v1/bills",
-        {"appointmentId": 1, "customerId": "{{customerId}}", "vehicleId": "{{vehicleId}}", "warrantyFee": 0, "serviceFee": 500000, "materialCost": 250000},
-        desc="appointmentId/customerId/vehicleId required; fees must be non-negative.",
-        tests=save("billId", "j.id")),
-    req("Get bill", "GET", "billingUrl", "/api/v1/bills/{{billId}}"),
-    req("List bills by customer", "GET", "billingUrl", "/api/v1/bills", query=[q("customerId", "{{customerId}}")]),
-    req("Record payment", "POST", "billingUrl", "/api/v1/bills/{{billId}}/payments",
-        {"type": "DEPOSIT", "method": "CASH", "amount": 100000},
-        desc="type: DEPOSIT | FINAL. amount > 0."),
-    req("List payments", "GET", "billingUrl", "/api/v1/bills/{{billId}}/payments"),
-    req("Void bill", "POST", "billingUrl", "/api/v1/bills/{{billId}}/void"),
-    {"name": "Ops", "item": [
-        req("Actuator health", "GET", "billingUrl", "/actuator/health"),
-        req("Actuator info", "GET", "billingUrl", "/actuator/info"),
-    ]},
-]}
 
 def var(k, v): return {"key": k, "value": v, "type": "string"}
 coll = {
     "info": {"name": "Service Bay", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
              "description": "All HTTP APIs for Service Bay. Run Identity > Register/Login first; create/register requests store IDs (customerId, vehicleId, billId) into collection variables for later requests."},
-    "item": [identity, customer, vehicle, billing],
+    "item": [identity, customer, vehicle],
     "variable": [var("identityUrl", "http://localhost:8083"), var("customerUrl", "http://localhost:8080"),
                  var("vehicleUrl", "http://localhost:8081"), var("billingUrl", "http://localhost:8084"),
                  var("userEmail", "dev@example.com"), var("userPassword", "Passw0rd!"),

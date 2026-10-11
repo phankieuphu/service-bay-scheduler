@@ -94,6 +94,45 @@ services:
     networks:
       - backend
 
+  billing-service:
+    build:
+      context: ./billing-service
+      dockerfile: Dockerfile
+    container_name: billing-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: billing_db
+      DB_SSLMODE: disable
+      API_PORT: 8084
+      KAFKA_BROKERS: kafka:29092
+    healthcheck:
+      # The JRE image has no curl, and its /bin/sh (dash) has no /dev/tcp,
+      # so ask readiness over bash's /dev/tcp.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/localhost/8084
+          && printf 'GET /actuator/health/readiness HTTP/1.0\r\n\r\n' >&3
+          && grep -q '"status":"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "8084:8084"
+    networks:
+      - backend
+
   postgres:
     image: postgres:16
     container_name: postgres

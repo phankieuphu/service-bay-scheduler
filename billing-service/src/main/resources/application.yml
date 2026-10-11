@@ -1,0 +1,52 @@
+# Environment variable names match the Go services where they overlap
+# (DB_*, KAFKA_BROKERS, API_PORT, LOG_LEVEL).
+spring:
+  application:
+    name: billing-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:billing_db}?sslmode=${DB_SSLMODE:disable}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: ${DB_MAX_OPEN_CONNS:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema (src/main/resources/db/migration); Hibernate
+      # only checks its mappings against it.
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+  lifecycle:
+    # Graceful shutdown: on SIGTERM, stop accepting requests and give
+    # in-flight ones this long to finish.
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:15s}
+
+server:
+  port: ${API_PORT:8084}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        # /actuator/health/readiness is UP only once Postgres is reachable.
+        # Liveness deliberately doesn't check it, so a database outage takes
+        # pods out of rotation instead of restarting them.
+        readiness:
+          include: readinessState,db
+  metrics:
+    tags:
+      application: billing-service
+
+logging:
+  level:
+    root: ${LOG_LEVEL:info}

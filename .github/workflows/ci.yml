@@ -56,6 +56,22 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
 
+  billing-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: billing-service
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+      # build = compile + unit and Testcontainers tests (Docker is available
+      # on GitHub's Ubuntu runners) + the boot jar.
+      - run: ./gradlew build --no-daemon
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -78,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [customer-service, vehicle-service, identity-service]
+        service: [customer-service, vehicle-service, identity-service, billing-service]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
