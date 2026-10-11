@@ -33,23 +33,19 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
-}
-
+// TokenResponse carries only the access token. The refresh token goes in
+// an HttpOnly cookie (see handler.RefreshCookies), out of scripts' reach.
 type TokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int64  `json:"expires_in"` // seconds until AccessToken expires
-	RefreshToken string `json:"refresh_token"`
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int64  `json:"expires_in"` // seconds until AccessToken expires
 }
 
 func NewTokenResponse(pair entity.TokenPair, now time.Time) TokenResponse {
 	return TokenResponse{
-		AccessToken:  pair.AccessToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    int64(pair.AccessExpiresAt.Sub(now).Seconds()),
-		RefreshToken: pair.RefreshToken,
+		AccessToken: pair.AccessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   int64(pair.AccessExpiresAt.Sub(now).Seconds()),
 	}
 }
 

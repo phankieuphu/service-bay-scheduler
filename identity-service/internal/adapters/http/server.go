@@ -33,11 +33,11 @@ func NewServer(cfg config.API, authService ports.AuthService, adminService ports
 	// and the request metrics.
 	ginhealth.RegisterRoutes(engine, h)
 	engine.Use(gin.Logger(), gin.Recovery())
-	engine.Use(corsMiddleware())
+	engine.Use(corsMiddleware(cfg.AllowedOrigins))
 	engine.Use(metrics.PrometheusMiddleWare())
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	v1 := engine.Group("/api/v1")
-	handler.NewAuthHandler(authService, tokens, throttle).RegisterRoutes(v1)
+	handler.NewAuthHandler(authService, tokens, throttle, handler.RefreshCookies{Secure: cfg.CookieSecure}).RegisterRoutes(v1)
 	handler.NewAdminHandler(adminService, tokens).RegisterRoutes(v1)
 
 	return &Server{
@@ -65,13 +65,25 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-// corsMiddleware allows the frontend dev server (a different origin) to call
-// this API directly; there's no gateway in front of these services yet.
-func corsMiddleware() gin.HandlerFunc {
+// corsMiddleware allows the listed frontend origins to call this API
+// directly (there's no gateway in front of these services yet), with
+// credentials so the refresh-token cookie is sent. Credentials rule out
+// "Access-Control-Allow-Origin: *", so the request's origin is echoed back
+// only when it's listed; other origins get no CORS headers and the browser
+// blocks the response.
+func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		allowed[o] = true
+	}
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Header("Vary", "Origin")
+		if origin := c.GetHeader("Origin"); allowed[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, "+handler.CSRFHeader)
+		}
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return

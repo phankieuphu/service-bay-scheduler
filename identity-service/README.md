@@ -19,25 +19,29 @@ All under `/api/v1`. Errors are `{"error": "..."}`.
 | Method & path | Body | Success | Errors |
 |---|---|---|---|
 | `POST /auth/register` | `{email, password, role?}` | `201` user | `400` validation, `403` role other than `CUSTOMER`, `409` email taken, `429` rate limited |
-| `POST /auth/login` | `{email, password}` | `200` tokens | `401` wrong email or password (same response for both), `403` account not `ACTIVE`, `429` rate limited |
-| `POST /auth/refresh` | `{refresh_token}` | `200` new tokens | `401` unknown, used, revoked or expired token |
-| `POST /auth/logout` | `{refresh_token}` | `204` | — (idempotent) |
+| `POST /auth/login` | `{email, password}` | `200` access token, sets the refresh cookie | `401` wrong email or password (same response for both), `403` account not `ACTIVE`, `429` rate limited |
+| `POST /auth/refresh` | none (refresh cookie + `X-Requested-With`) | `200` new access token, rotates the cookie | `401` missing, unknown, used, revoked or expired token (cookie cleared), `403` no `X-Requested-With` |
+| `POST /auth/logout` | none (refresh cookie + `X-Requested-With`) | `204`, clears the cookie | `403` no `X-Requested-With` (otherwise idempotent) |
 | `GET /me` | `Authorization: Bearer <access_token>` | `200` user | `401` |
 | `POST /admin/users` | `{email, password, role}` (ADMIN token) | `201` user | `400` validation, `401`, `403` not an active admin, `409` email taken |
 | `PATCH /admin/users/:id` | `{status}`: `ACTIVE`/`INACTIVE`/`LOCKED` (ADMIN token) | `200` user | `400` validation or own account, `401`, `403`, `404` |
 
 `role` defaults to `CUSTOMER`, and `CUSTOMER` is the only self-registrable role. `TECHNICIAN`, `MANAGER` and `ADMIN` are staff roles that other services grant access to, so an admin creates them with `POST /admin/users`. Passwords are 8–72 characters (72 is bcrypt's input limit). Emails are trimmed, lowercased, and unique case-insensitively.
 
-Token response:
+Token response (the refresh token is never in the body):
 
 ```json
-{ "access_token": "eyJ...", "token_type": "Bearer", "expires_in": 900, "refresh_token": "..." }
+{ "access_token": "eyJ...", "token_type": "Bearer", "expires_in": 900 }
 ```
 
 ## Tokens
 
 - **Access token**: HS256 JWT, 15 min (`JWT_ACCESS_TTL_SEC`). Claims: `sub` (user id), `role`, `iss`, `iat`, `exp`. Stateless, so it stays valid until expiry even after logout.
 - **Refresh token**: 256-bit random opaque string, 7 days (`JWT_REFRESH_TTL_SEC`). Stored in Redis as `refresh:<sha256(token)>` → user id, never in plain text. Each refresh atomically consumes it (`GETDEL`) and issues a new one, so a replayed token is rejected. Redis is therefore a critical `/readyz` dependency here.
+- **Refresh cookie**: the refresh token travels only in a `refresh_token` cookie that is `HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth`, so page scripts, including any XSS, can't read it, and it's only sent to the auth routes. `/auth/refresh` and `/auth/logout` read it from there and also require an `X-Requested-With` header. A cross-site form can't send that header, and a cross-origin `fetch` that does has to pass a CORS preflight.
+- **CORS**: a cookie means credentialed CORS, which rules out `*`. Only origins in `CORS_ALLOWED_ORIGINS` (comma-separated, default `http://localhost:5173`) get `Access-Control-Allow-Origin` (their own origin echoed back) and `Access-Control-Allow-Credentials: true`. Browser clients call the auth routes with `credentials: 'include'`.
+- `SameSite=Strict` assumes the frontend and the API are **same-site** (same registrable domain, e.g. `app.example.com` and `api.example.com`, or `localhost` on different ports). A frontend on a different site wouldn't send the cookie at all.
+- `AUTH_COOKIE_SECURE=false` drops `Secure`, for plain-HTTP local setups that won't store Secure cookies (Safari, Postman). Chrome and Firefox accept `Secure` on `http://localhost`. docker-compose sets it to `false`.
 
 ## Admin
 
