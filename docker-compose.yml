@@ -196,7 +196,7 @@ services:
       - backend
 
   kafka-exporter:
-    image: danielqsj/kafka-exporter:v1.8.0
+    image: danielqsj/kafka-exporter:v1.10.0
     container_name: kafka-exporter
     # exits if the broker isn't up yet
     restart: on-failure
