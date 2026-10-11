@@ -28,6 +28,7 @@ safe-outputs:
     allowed: ["quality: good", "quality: needs-work", "quality: incomplete"]
     max: 3
     issues: false
+model: gpt-4o
 ---
 
 # PR Description Review
