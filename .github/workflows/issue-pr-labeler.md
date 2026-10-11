@@ -2,6 +2,7 @@
 emoji: 🏷️
 description: Applies type, area, risk, and quality labels to new and edited issues and pull requests based on their content and (for PRs) changed files.
 intent: Every issue and PR is routable at a glance — its type, the services it touches, PR risk, and whether an issue has enough information to act on — without a maintainer labeling it by hand.
+engine: claude
 on:
   issues:
     types: [opened, edited, reopened]

@@ -2,6 +2,7 @@
 emoji: 📝
 description: Reviews pull request descriptions for quality, completeness, clarity, linked issues, and testing/risk notes, then posts one actionable review comment and a quality label.
 intent: Every ready-for-review PR carries a description good enough for a reviewer to understand what changed, why, how it was verified, and what could break — and the author is told exactly what is missing when it is not.
+engine: claude
 on:
   pull_request:
     types: [opened, edited, reopened, ready_for_review]
