@@ -48,7 +48,7 @@ safe-outputs:
 
 # Issue & PR Labeler
 
-Label ${{ github.event_name == 'issues' && 'issue' || 'pull request' }} #${{ github.event.issue.number || github.event.pull_request.number }} in `${{ github.repository }}` based on its content.
+Label issue or pull request #${{ github.event.issue.number || github.event.pull_request.number }} in `${{ github.repository }}` based on its content. Use `gh pr view` first; if the number is not a pull request, treat it as an issue.
 
 ## Gather context
 
