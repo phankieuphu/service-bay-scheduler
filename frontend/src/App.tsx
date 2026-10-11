@@ -8,12 +8,20 @@ import { CustomersPage } from './components/CustomersPage'
 import { Tabs } from './components/Tabs'
 import { UserMenu } from './components/UserMenu'
 import { VehiclesPage } from './components/VehiclesPage'
+import { BillingPage } from './components/demo/BillingPage'
+import { BookingPage } from './components/demo/BookingPage'
+import { HubBoardPage } from './components/demo/HubBoardPage'
+import { OverviewPage } from './components/demo/OverviewPage'
+import { ReportPage } from './components/demo/ReportPage'
+import type { DemoSection } from './components/demo/sections'
+import { DemoProvider } from './demo/DemoProvider'
 import './App.css'
+import './components/demo/demo.css'
 
-type Section = 'customers' | 'vehicles' | 'account'
+type Section = DemoSection
 
 function Workspace({ user }: { user: User }) {
-  const [section, setSection] = useState<Section>('customers')
+  const [section, setSection] = useState<Section>('overview')
   // Set when another section links to a vehicle ("Open" on a customer's
   // vehicle list); VehiclesPage opens it on mount.
   const [vehicleToOpen, setVehicleToOpen] = useState<number | null>(null)
@@ -23,34 +31,49 @@ function Workspace({ user }: { user: User }) {
     setSection('vehicles')
   }
 
+  function navigate(next: Section) {
+    setVehicleToOpen(null)
+    setSection(next)
+  }
+
   return (
-    <>
+    <DemoProvider>
       <header className="app-header">
         <div className="header-bar">
-          <Brand as="h1" />
+          <div className="brand-row">
+            <Brand as="h1" />
+            <span className="demo-badge">Demo mode</span>
+          </div>
           <UserMenu user={user} />
         </div>
         <Tabs
           label="Sections"
           tabs={[
+            { id: 'overview', label: 'Overview' },
             { id: 'customers', label: 'Customers' },
             { id: 'vehicles', label: 'Vehicles' },
+            { id: 'booking', label: 'Book service' },
+            { id: 'hub', label: 'Hub board' },
+            { id: 'billing', label: 'Billing' },
+            { id: 'reports', label: 'Reports' },
             { id: 'account', label: 'Account' },
           ]}
           active={section}
-          onChange={(next) => {
-            setVehicleToOpen(null)
-            setSection(next)
-          }}
+          onChange={navigate}
         />
       </header>
 
       <main>
+        {section === 'overview' && <OverviewPage onNavigate={navigate} />}
         {section === 'customers' && <CustomersPage onOpenVehicle={openVehicle} />}
         {section === 'vehicles' && <VehiclesPage initialVehicleId={vehicleToOpen} />}
+        {section === 'booking' && <BookingPage onNavigate={navigate} />}
+        {section === 'hub' && <HubBoardPage onNavigate={navigate} />}
+        {section === 'billing' && <BillingPage onNavigate={navigate} />}
+        {section === 'reports' && <ReportPage />}
         {section === 'account' && <AccountPanel user={user} />}
       </main>
-    </>
+    </DemoProvider>
   )
 }
 

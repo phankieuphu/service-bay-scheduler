@@ -1,5 +1,5 @@
 .app {
-  max-width: 1120px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 32px 16px 64px;
 }
@@ -115,6 +115,17 @@
   display: flex;
   gap: 24px;
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tabs button {
+  white-space: nowrap;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .tabs button {
