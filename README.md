@@ -37,6 +37,7 @@ Known gaps:
 * [Technical Requirement](docs/technical-requirement.md): scale and HA targets, and today's stack (§1a)
 * [Data Warehouse Design](docs/data-warehouse-design.md): Kimball bus matrix, star schemas, CDC + dbt load plan, sizing per tier
 * [Responsibility Planning](docs/responsibility-planning.md)
+* [AI Agents](docs/ai-agents.md): PR description review, issue/PR labeler, and AI code review (`/review`) workflows: what they do, setup, and troubleshooting
 * Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
 * [Load tests](loadtest/README.md)
