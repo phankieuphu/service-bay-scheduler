@@ -26,6 +26,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8080:8080"
     networks:
@@ -57,6 +63,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8081:8081"
     networks:
@@ -89,6 +101,12 @@ services:
       # Local-dev only. Services that validate access tokens themselves
       # must share this value.
       JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8083:8083"
     networks:

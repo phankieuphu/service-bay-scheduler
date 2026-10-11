@@ -13,7 +13,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 # ===== RUNTIME STAGE =====
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y ca-certificates \
+# curl is for the docker-compose healthcheck on /readyz.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

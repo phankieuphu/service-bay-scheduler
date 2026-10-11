@@ -197,7 +197,7 @@ customer-service and vehicle-service publish to the fixed topic names in `intern
 
 Shared: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_SSLMODE`, `DB_MAX_OPEN_CONNS`, `KAFKA_BROKERS` (`localhost:9092` from the host), `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `LOG_LEVEL`, `LOG_FORMAT`.
 
-Every service exposes `GET /healthz` (liveness), `GET /readyz` (dependencies) and `GET /metrics` (Prometheus).
+Every service exposes `GET /healthz` (liveness), `GET /readyz` (dependencies) and `GET /metrics` (Prometheus). In k8s, `/healthz` backs the startup and liveness probes and `/readyz` the readiness probe. In docker-compose, `/readyz` is each service's `healthcheck`, so `docker compose ps` shows `healthy` once its dependencies are up.
 
 ---
 
