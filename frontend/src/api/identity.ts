@@ -8,7 +8,8 @@ const BASE_URL =
 export type Role = 'CUSTOMER' | 'TECHNICIAN' | 'MANAGER' | 'ADMIN'
 
 // Only these can be chosen at sign-up; the API rejects MANAGER/ADMIN with 403.
-export type SelfRegisterRole = Extract<Role, 'CUSTOMER' | 'TECHNICIAN'>
+// Staff roles (TECHNICIAN, MANAGER, ADMIN) are provisioned by an admin.
+export type SelfRegisterRole = Extract<Role, 'CUSTOMER'>
 
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED'
 

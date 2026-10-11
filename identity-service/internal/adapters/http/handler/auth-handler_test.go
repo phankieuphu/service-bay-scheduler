@@ -40,7 +40,8 @@ func (m *mockAuthService) Me(ctx context.Context, userID string) (entity.User, e
 	return m.meFunc(ctx, userID)
 }
 
-// mockTokens accepts exactly one token, "good".
+// mockTokens accepts two tokens: "good" (a customer, user-1) and "admin"
+// (an admin, admin-1).
 type mockTokens struct{}
 
 func (mockTokens) IssueAccessToken(entity.User) (string, time.Time, error) {
@@ -48,10 +49,13 @@ func (mockTokens) IssueAccessToken(entity.User) (string, time.Time, error) {
 }
 
 func (mockTokens) ParseAccessToken(token string) (entity.AccessClaims, error) {
-	if token != "good" {
-		return entity.AccessClaims{}, ports.ErrInvalidToken
+	switch token {
+	case "good":
+		return entity.AccessClaims{UserID: "user-1", Role: constants.RoleCustomer}, nil
+	case "admin":
+		return entity.AccessClaims{UserID: "admin-1", Role: constants.RoleAdmin}, nil
 	}
-	return entity.AccessClaims{UserID: "user-1", Role: constants.RoleCustomer}, nil
+	return entity.AccessClaims{}, ports.ErrInvalidToken
 }
 
 func newTestRouter(svc ports.AuthService) *gin.Engine {

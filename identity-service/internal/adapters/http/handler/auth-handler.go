@@ -159,8 +159,10 @@ func writeError(c *gin.Context, err error) {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, ports.ErrInvalidCredentials), errors.Is(err, ports.ErrInvalidToken):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-	case errors.Is(err, ports.ErrUserInactive):
+	case errors.Is(err, ports.ErrUserInactive), errors.Is(err, ports.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, ports.ErrInvalidInput):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, ports.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	default:

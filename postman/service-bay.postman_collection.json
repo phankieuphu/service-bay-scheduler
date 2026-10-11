@@ -31,7 +31,7 @@
                 "register"
               ]
             },
-            "description": "Role: CUSTOMER (default) | TECHNICIAN | MANAGER | ADMIN. Password 8-72 chars.",
+            "description": "Only CUSTOMER (the default) can self-register; staff are created via Admin > Create user. Password 8-72 chars. 429 when rate-limited.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"role\": \"CUSTOMER\"\n}",
@@ -220,6 +220,112 @@
               "type": "noauth"
             }
           }
+        },
+        {
+          "name": "Admin",
+          "description": "Needs an ADMIN access token: log in as the bootstrap admin (ADMIN_EMAIL / ADMIN_PASSWORD) first.",
+          "item": [
+            {
+              "name": "Create user",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/v1/admin/users",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ]
+                },
+                "description": "Any role: CUSTOMER | TECHNICIAN | MANAGER | ADMIN. Emits UserCreated.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"staff.{{$timestamp}}@example.com\",\n  \"password\": \"{{userPassword}}\",\n  \"role\": \"TECHNICIAN\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{accessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('staffUserId', j.id); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Set user status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/v1/admin/users/{{staffUserId}}",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users",
+                    "{{staffUserId}}"
+                  ]
+                },
+                "description": "ACTIVE | INACTIVE | LOCKED. Emits UserUpdated. Not allowed on your own account.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"LOCKED\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{accessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         },
         {
           "name": "Ops",

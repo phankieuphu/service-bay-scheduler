@@ -58,6 +58,14 @@ spec:
                 secretKeyRef:
                   name: identity-jwt
                   key: JWT_SECRET
+            # Optional: create an identity-admin Secret with ADMIN_EMAIL and
+            # ADMIN_PASSWORD to bootstrap the first ADMIN, then delete it.
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef: { name: identity-admin, key: ADMIN_EMAIL, optional: true }
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: identity-admin, key: ADMIN_PASSWORD, optional: true }
 ---
 apiVersion: v1
 kind: Service

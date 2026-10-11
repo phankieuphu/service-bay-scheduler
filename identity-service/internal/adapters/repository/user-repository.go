@@ -9,9 +9,11 @@ import (
 	"identity-service/internal/domain/entity"
 	"identity-service/internal/domain/ports"
 	"identity-service/pkg/utils"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type UserRepository struct {
@@ -51,10 +53,47 @@ func (u UserRepository) GetByEmail(ctx context.Context, email string) (entity.Us
 	return u.first(ctx, "lower(email) = lower(?)", email)
 }
 
+// GetByIDForUpdate implements [ports.UserRepository].
+func (u UserRepository) GetByIDForUpdate(ctx context.Context, id string) (entity.User, error) {
+	if uuid.Validate(id) != nil {
+		return entity.User{}, ports.ErrNotFound
+	}
+	return u.firstWith(database_provider.DBFromContext(ctx, u.db).Clauses(clause.Locking{Strength: "UPDATE"}), "id = ?", id)
+}
+
+// UpdateStatus implements [ports.UserRepository].
+func (u UserRepository) UpdateStatus(ctx context.Context, id string, status constants.UserStatus, updatedAt time.Time) (entity.User, error) {
+	if uuid.Validate(id) != nil {
+		return entity.User{}, ports.ErrNotFound
+	}
+	db := database_provider.DBFromContext(ctx, u.db)
+	result := db.Model(&models.User{}).Where("id = ?", id).
+		Updates(map[string]any{"status": string(status), "updated_at": updatedAt})
+	if result.Error != nil {
+		return entity.User{}, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return entity.User{}, ports.ErrNotFound
+	}
+	return u.firstWith(db, "id = ?", id)
+}
+
+// ExistsWithRole implements [ports.UserRepository].
+func (u UserRepository) ExistsWithRole(ctx context.Context, role constants.Role) (bool, error) {
+	var count int64
+	err := database_provider.DBFromContext(ctx, u.db).Model(&models.User{}).
+		Where("role = ?", string(role)).Limit(1).Count(&count).Error
+	return count > 0, err
+}
+
 func (u UserRepository) first(ctx context.Context, query string, args ...any) (entity.User, error) {
+	return u.firstWith(database_provider.DBFromContext(ctx, u.db), query, args...)
+}
+
+func (u UserRepository) firstWith(db *gorm.DB, query string, args ...any) (entity.User, error) {
 	var model models.User
 
-	if err := database_provider.DBFromContext(ctx, u.db).Where(query, args...).First(&model).Error; err != nil {
+	if err := db.Where(query, args...).First(&model).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return entity.User{}, ports.ErrNotFound
 		}

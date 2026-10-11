@@ -18,13 +18,15 @@ All under `/api/v1`. Errors are `{"error": "..."}`.
 
 | Method & path | Body | Success | Errors |
 |---|---|---|---|
-| `POST /auth/register` | `{email, password, role?}` | `201` user | `400` validation, `403` role is `MANAGER`/`ADMIN`, `409` email taken, `429` rate limited |
+| `POST /auth/register` | `{email, password, role?}` | `201` user | `400` validation, `403` role other than `CUSTOMER`, `409` email taken, `429` rate limited |
 | `POST /auth/login` | `{email, password}` | `200` tokens | `401` wrong email or password (same response for both), `403` account not `ACTIVE`, `429` rate limited |
 | `POST /auth/refresh` | `{refresh_token}` | `200` new tokens | `401` unknown, used, revoked or expired token |
 | `POST /auth/logout` | `{refresh_token}` | `204` | — (idempotent) |
 | `GET /me` | `Authorization: Bearer <access_token>` | `200` user | `401` |
+| `POST /admin/users` | `{email, password, role}` (ADMIN token) | `201` user | `400` validation, `401`, `403` not an active admin, `409` email taken |
+| `PATCH /admin/users/:id` | `{status}`: `ACTIVE`/`INACTIVE`/`LOCKED` (ADMIN token) | `200` user | `400` validation or own account, `401`, `403`, `404` |
 
-`role` defaults to `CUSTOMER`; `TECHNICIAN` is also self-registrable. Passwords are 8–72 characters (72 is bcrypt's input limit). Emails are trimmed, lowercased, and unique case-insensitively.
+`role` defaults to `CUSTOMER`, and `CUSTOMER` is the only self-registrable role. `TECHNICIAN`, `MANAGER` and `ADMIN` are staff roles that other services grant access to, so an admin creates them with `POST /admin/users`. Passwords are 8–72 characters (72 is bcrypt's input limit). Emails are trimmed, lowercased, and unique case-insensitively.
 
 Token response:
 
@@ -36,6 +38,13 @@ Token response:
 
 - **Access token**: HS256 JWT, 15 min (`JWT_ACCESS_TTL_SEC`). Claims: `sub` (user id), `role`, `iss`, `iat`, `exp`. Stateless, so it stays valid until expiry even after logout.
 - **Refresh token**: 256-bit random opaque string, 7 days (`JWT_REFRESH_TTL_SEC`). Stored in Redis as `refresh:<sha256(token)>` → user id, never in plain text. Each refresh atomically consumes it (`GETDEL`) and issues a new one, so a replayed token is rejected. Redis is therefore a critical `/readyz` dependency here.
+
+## Admin
+
+- `/admin/*` needs an `ADMIN` access token. Each call also re-reads the caller from the database and requires an `ACTIVE` `ADMIN`, so a demoted or locked admin is refused even while their token is still valid (up to 15 min).
+- `POST /admin/users` creates a user with any role and emits `UserCreated`, like registration does.
+- `PATCH /admin/users/:id` sets a user's status and emits `UserUpdated`. A `LOCKED` or `INACTIVE` user can't log in or refresh. Their current access token stays valid until it expires. An admin can't change their own status, so the last admin can't lock themselves out.
+- **First admin:** set `ADMIN_EMAIL` and `ADMIN_PASSWORD`. On startup, if no `ADMIN` exists, one is created with them. An existing non-admin account with that email is never promoted. Once the admin exists, the variables are ignored, and you can remove them. docker-compose sets `admin@servicebay.local` / `admin-local-dev-pass`.
 
 ## Rate limiting
 

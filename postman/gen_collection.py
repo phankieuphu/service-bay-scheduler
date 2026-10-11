@@ -48,7 +48,7 @@ def ops(base):
 identity = {"name": "Identity Service", "description": "identity-service (:8083). Auth + JWT issuing.", "item": [
     req("Register", "POST", "identityUrl", "/api/v1/auth/register",
         {"email": "{{userEmail}}", "password": "{{userPassword}}", "role": "CUSTOMER"},
-        desc="Role: CUSTOMER (default) | TECHNICIAN | MANAGER | ADMIN. Password 8-72 chars.",
+        desc="Only CUSTOMER (the default) can self-register; staff are created via Admin > Create user. Password 8-72 chars. 429 when rate-limited.",
         tests=save("userId", "j.id")),
     req("Login", "POST", "identityUrl", "/api/v1/auth/login",
         {"email": "{{userEmail}}", "password": "{{userPassword}}"},
@@ -61,6 +61,15 @@ identity = {"name": "Identity Service", "description": "identity-service (:8083)
     req("Me", "GET", "identityUrl", "/api/v1/me", desc="Requires Authorization: Bearer <access token>.", auth=True),
     req("Logout", "POST", "identityUrl", "/api/v1/auth/logout",
         {"refresh_token": "{{refreshToken}}"}, desc="Revokes the refresh token. 204 on success."),
+    {"name": "Admin", "description": "Needs an ADMIN access token: log in as the bootstrap admin (ADMIN_EMAIL / ADMIN_PASSWORD) first.", "item": [
+        req("Create user", "POST", "identityUrl", "/api/v1/admin/users",
+            {"email": "staff.{{$timestamp}}@example.com", "password": "{{userPassword}}", "role": "TECHNICIAN"},
+            desc="Any role: CUSTOMER | TECHNICIAN | MANAGER | ADMIN. Emits UserCreated.", auth=True,
+            tests=save("staffUserId", "j.id")),
+        req("Set user status", "PATCH", "identityUrl", "/api/v1/admin/users/{{staffUserId}}",
+            {"status": "LOCKED"},
+            desc="ACTIVE | INACTIVE | LOCKED. Emits UserUpdated. Not allowed on your own account.", auth=True),
+    ]},
     ops("identityUrl"),
 ]}
 

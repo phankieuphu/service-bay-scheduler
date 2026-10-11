@@ -21,7 +21,7 @@ type Server struct {
 	engine     *gin.Engine
 }
 
-func NewServer(cfg config.API, authService ports.AuthService, tokens ports.TokenIssuer, throttle *handler.Throttle, h *health.Handler) (*Server, error) {
+func NewServer(cfg config.API, authService ports.AuthService, adminService ports.AdminService, tokens ports.TokenIssuer, throttle *handler.Throttle, h *health.Handler) (*Server, error) {
 	engine := gin.New()
 	// c.ClientIP() feeds the per-IP rate limits, so only listed proxies'
 	// X-Forwarded-For is believed (gin trusts every proxy by default).
@@ -38,6 +38,7 @@ func NewServer(cfg config.API, authService ports.AuthService, tokens ports.Token
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	v1 := engine.Group("/api/v1")
 	handler.NewAuthHandler(authService, tokens, throttle).RegisterRoutes(v1)
+	handler.NewAdminHandler(adminService, tokens).RegisterRoutes(v1)
 
 	return &Server{
 		engine: engine,

@@ -16,6 +16,7 @@ type Config struct {
 	Logger
 	JWT
 	RateLimit
+	Admin
 }
 
 type Database struct {
@@ -88,6 +89,14 @@ type RateLimit struct {
 	RegisterWindow time.Duration
 }
 
+// Admin bootstraps the first ADMIN account on startup when both fields are
+// set and no admin exists yet (see AdminService.BootstrapAdmin). Unset
+// them once it exists; they're ignored from then on.
+type Admin struct {
+	Email    string
+	Password string
+}
+
 func LoadConfig() *Config {
 	return &Config{
 		Database: Database{
@@ -134,6 +143,10 @@ func LoadConfig() *Config {
 			LoginWindow:    time.Duration(getEnvInt("RATE_LIMIT_LOGIN_WINDOW_SEC", 900)) * time.Second,
 			RegisterPerIP:  getEnvInt("RATE_LIMIT_REGISTER_PER_IP", 20),
 			RegisterWindow: time.Duration(getEnvInt("RATE_LIMIT_REGISTER_WINDOW_SEC", 3600)) * time.Second,
+		},
+		Admin: Admin{
+			Email:    GetEnv("ADMIN_EMAIL", ""),
+			Password: GetEnv("ADMIN_PASSWORD", ""),
 		},
 	}
 }

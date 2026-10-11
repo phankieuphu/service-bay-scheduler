@@ -10,8 +10,22 @@ type RegisterRequest struct {
 	// max=72 is bcrypt's input limit; anything past it would be silently
 	// ignored when hashing.
 	Password string `json:"password" binding:"required,min=8,max=72"`
-	// Role defaults to CUSTOMER when omitted.
+	// Role defaults to CUSTOMER when omitted; any other role is refused
+	// with 403 (staff are provisioned through POST /admin/users).
 	Role string `json:"role" binding:"omitempty,oneof=CUSTOMER TECHNICIAN MANAGER ADMIN"`
+}
+
+// CreateUserRequest is the body of POST /admin/users. Unlike registration,
+// role is required and may be any role.
+type CreateUserRequest struct {
+	Email    string `json:"email" binding:"required,email,max=255"`
+	Password string `json:"password" binding:"required,min=8,max=72"`
+	Role     string `json:"role" binding:"required,oneof=CUSTOMER TECHNICIAN MANAGER ADMIN"`
+}
+
+// UpdateUserStatusRequest is the body of PATCH /admin/users/:id.
+type UpdateUserStatusRequest struct {
+	Status string `json:"status" binding:"required,oneof=ACTIVE INACTIVE LOCKED"`
 }
 
 type LoginRequest struct {
@@ -45,6 +59,7 @@ type UserResponse struct {
 	Role      string    `json:"role"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func NewUserResponse(user entity.User) UserResponse {
@@ -54,5 +69,6 @@ func NewUserResponse(user entity.User) UserResponse {
 		Role:      string(user.Role),
 		Status:    string(user.Status),
 		CreatedAt: user.CreatedAt.UTC(),
+		UpdatedAt: user.UpdatedAt.UTC(),
 	}
 }

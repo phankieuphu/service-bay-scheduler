@@ -10,10 +10,19 @@ const (
 )
 
 // SelfRegisterable reports whether POST /auth/register may create a user
-// with this role. MANAGER and ADMIN accounts grant control over other
-// users' data, so they must be provisioned by an existing admin instead.
+// with this role. Only CUSTOMER: TECHNICIAN, MANAGER and ADMIN are staff
+// roles that other services grant access to, so an admin provisions them
+// (POST /admin/users).
 func (r Role) SelfRegisterable() bool {
-	return r == RoleCustomer || r == RoleTechnician
+	return r == RoleCustomer
+}
+
+func (r Role) Valid() bool {
+	switch r {
+	case RoleCustomer, RoleTechnician, RoleManager, RoleAdmin:
+		return true
+	}
+	return false
 }
 
 type UserStatus string
@@ -23,3 +32,7 @@ const (
 	UserInactive UserStatus = "INACTIVE"
 	UserLocked   UserStatus = "LOCKED"
 )
+
+func (s UserStatus) Valid() bool {
+	return s == UserActive || s == UserInactive || s == UserLocked
+}

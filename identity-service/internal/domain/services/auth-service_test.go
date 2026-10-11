@@ -13,9 +13,24 @@ import (
 )
 
 type MockUserRepository struct {
-	CreateFunc     func(ctx context.Context, user entity.User) (entity.User, error)
-	GetByIDFunc    func(ctx context.Context, id string) (entity.User, error)
-	GetByEmailFunc func(ctx context.Context, email string) (entity.User, error)
+	CreateFunc           func(ctx context.Context, user entity.User) (entity.User, error)
+	GetByIDFunc          func(ctx context.Context, id string) (entity.User, error)
+	GetByEmailFunc       func(ctx context.Context, email string) (entity.User, error)
+	GetByIDForUpdateFunc func(ctx context.Context, id string) (entity.User, error)
+	UpdateStatusFunc     func(ctx context.Context, id string, status constants.UserStatus, updatedAt time.Time) (entity.User, error)
+	ExistsWithRoleFunc   func(ctx context.Context, role constants.Role) (bool, error)
+}
+
+func (m *MockUserRepository) GetByIDForUpdate(ctx context.Context, id string) (entity.User, error) {
+	return m.GetByIDForUpdateFunc(ctx, id)
+}
+
+func (m *MockUserRepository) UpdateStatus(ctx context.Context, id string, status constants.UserStatus, updatedAt time.Time) (entity.User, error) {
+	return m.UpdateStatusFunc(ctx, id, status, updatedAt)
+}
+
+func (m *MockUserRepository) ExistsWithRole(ctx context.Context, role constants.Role) (bool, error) {
+	return m.ExistsWithRoleFunc(ctx, role)
 }
 
 func (m *MockUserRepository) Create(ctx context.Context, user entity.User) (entity.User, error) {
@@ -218,18 +233,7 @@ func TestAuthService_Register(t *testing.T) {
 		}
 	})
 
-	t.Run("accepts technician", func(t *testing.T) {
-		users := &MockUserRepository{CreateFunc: func(ctx context.Context, user entity.User) (entity.User, error) { return user, nil }}
-		outbox := &MockOutboxRepository{CreateFunc: func(context.Context, entity.OutboxMessage) error { return nil }}
-		svc := newTestService(t, users, outbox, nil, nil, nil)
-
-		user, err := svc.Register(context.Background(), entity.Register{Email: "t@example.com", Password: "s3cret-pass", Role: constants.RoleTechnician})
-		if err != nil || user.Role != constants.RoleTechnician {
-			t.Fatalf("got (%+v, %v), want technician user", user, err)
-		}
-	})
-
-	for _, role := range []constants.Role{constants.RoleManager, constants.RoleAdmin} {
+	for _, role := range []constants.Role{constants.RoleTechnician, constants.RoleManager, constants.RoleAdmin} {
 		t.Run("rejects self-registering as "+string(role), func(t *testing.T) {
 			users := &MockUserRepository{CreateFunc: func(context.Context, entity.User) (entity.User, error) {
 				t.Error("user should not be created")

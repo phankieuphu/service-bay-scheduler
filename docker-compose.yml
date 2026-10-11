@@ -89,6 +89,9 @@ services:
       # Local-dev only. Services that validate access tokens themselves
       # must share this value.
       JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+      # Local-dev only: creates this ADMIN on first start if none exists.
+      ADMIN_EMAIL: admin@servicebay.local
+      ADMIN_PASSWORD: admin-local-dev-pass
     ports:
       - "8083:8083"
     networks:
