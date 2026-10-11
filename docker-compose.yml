@@ -125,13 +125,31 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
-      - ./postgres/seed/init-customer.sql:/docker-entrypoint-initdb.d/09-seed-customer.sql
-      - ./postgres/seed/init-vehicle.sql:/docker-entrypoint-initdb.d/10-seed-vehicle.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
+
+  # Dev-only: loads postgres/seed into customer_db and vehicle_db once the
+  # services' migrations have created the tables, then exits. Skips tables
+  # that already have rows. Leave it out with --scale db-seed=0.
+  db-seed:
+    image: postgres:16
+    container_name: db-seed
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    volumes:
+      - ./postgres/seed:/seed:ro
+    entrypoint: ["sh", "/seed/seed.sh"]
+    restart: "no"
     networks:
       - backend
 

@@ -1,3 +1,10 @@
+-- Baseline: the schema postgres/init/03-vehicle-service.sql used to create.
+-- Every statement is IF NOT EXISTS, so a database that init script already
+-- built (an existing volume) adopts this migration instead of failing on
+-- it, and picks up anything it was missing. Later changes go in new,
+-- numbered files: never edit a migration that has shipped.
+
+-- +goose Up
 -- =============================================================
 -- vehicle_db — vehicle-service
 -- =============================================================
@@ -12,9 +19,7 @@
 -- relationships that don't cross a service boundary.
 -- =============================================================
 
-\connect vehicle_db
-
-CREATE TABLE vehicle_model (
+CREATE TABLE IF NOT EXISTS vehicle_model (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     make       varchar(100) NOT NULL,
     model      varchar(100) NOT NULL,
@@ -23,7 +28,7 @@ CREATE TABLE vehicle_model (
     UNIQUE (make, model, year)
 );
 
-CREATE TABLE vehicle (
+CREATE TABLE IF NOT EXISTS vehicle (
     id                BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vin               varchar(17) NOT NULL UNIQUE,
     license_plate     varchar(20),
@@ -35,15 +40,15 @@ CREATE TABLE vehicle (
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-Create Index Idx_Vehicle_Model On Vehicle(Vehicle_Model_Id);
+CREATE INDEX IF NOT EXISTS idx_vehicle_model ON vehicle(vehicle_model_id);
 
 -- vehicle-service stores plates normalized (uppercased, everything but
 -- A-Z0-9 stripped), so this also catches "51A-123.45" vs "51a12345". NULL plates
 -- (not yet registered) don't collide with each other.
-CREATE UNIQUE INDEX uq_vehicle_license_plate ON vehicle(license_plate);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_vehicle_license_plate ON vehicle(license_plate);
 
 -- Ownership can change over time
-CREATE TABLE customer_vehicle (
+CREATE TABLE IF NOT EXISTS customer_vehicle (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_id BIGINT NOT NULL,     -- owned by customer-service, no FK
     vehicle_id  BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE RESTRICT,
@@ -55,15 +60,15 @@ CREATE TABLE customer_vehicle (
     CHECK (owned_to IS NULL OR owned_to >= owned_from)
 );
 
-CREATE INDEX idx_cust_vehicle_customer ON customer_vehicle(customer_id);
-CREATE INDEX idx_cust_vehicle_vehicle  ON customer_vehicle(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_cust_vehicle_customer ON customer_vehicle(customer_id);
+CREATE INDEX IF NOT EXISTS idx_cust_vehicle_vehicle  ON customer_vehicle(vehicle_id);
 
 -- Only one CURRENT owner per vehicle
-CREATE UNIQUE INDEX uq_vehicle_current_owner
+CREATE UNIQUE INDEX IF NOT EXISTS uq_vehicle_current_owner
     ON customer_vehicle(vehicle_id) WHERE status = 'CURRENT';
 
 -- Parts installed on a specific car
-CREATE TABLE vehicle_material (
+CREATE TABLE IF NOT EXISTS vehicle_material (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vehicle_id   BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE CASCADE,
     material_id  BIGINT NOT NULL,    -- owned by dealership-service, no FK
@@ -73,8 +78,8 @@ CREATE TABLE vehicle_material (
     UNIQUE (vehicle_id, material_id)
 );
 
-CREATE INDEX idx_veh_material_vehicle  ON vehicle_material(vehicle_id);
-CREATE INDEX idx_veh_material_material ON vehicle_material(material_id);
+CREATE INDEX IF NOT EXISTS idx_veh_material_vehicle  ON vehicle_material(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_veh_material_material ON vehicle_material(material_id);
 
 -- Service-history read model (architecture-design.md §1, §6): one row per
 -- completed appointment, written only by vehicle-service's consumer of
@@ -82,7 +87,7 @@ CREATE INDEX idx_veh_material_material ON vehicle_material(material_id);
 -- idempotency key, so a redelivered event is a no-op. services is a copy
 -- of what was done at the time (Pattern c), not a live reference into
 -- dealership-service's catalog.
-CREATE TABLE vehicle_service_history (
+CREATE TABLE IF NOT EXISTS vehicle_service_history (
     id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vehicle_id     BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE RESTRICT,
     appointment_id BIGINT NOT NULL UNIQUE,  -- owned by scheduler-service, no FK
@@ -92,11 +97,10 @@ CREATE TABLE vehicle_service_history (
     created_at     timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_vehicle_service_history_vehicle
+CREATE INDEX IF NOT EXISTS idx_vehicle_service_history_vehicle
     ON vehicle_service_history(vehicle_id, completed_at DESC);
 
-
-CREATE TABLE outbox_message (
+CREATE TABLE IF NOT EXISTS outbox_message (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     topic        varchar(255) NOT NULL,
     message_key  varchar(255) NOT NULL,
@@ -107,4 +111,12 @@ CREATE TABLE outbox_message (
 
 -- Partial index so the relay's poll (WHERE published_at IS NULL) stays
 -- cheap regardless of how many published rows have piled up.
-CREATE INDEX idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;
+
+-- +goose Down
+DROP TABLE IF EXISTS outbox_message;
+DROP TABLE IF EXISTS vehicle_service_history;
+DROP TABLE IF EXISTS vehicle_material;
+DROP TABLE IF EXISTS customer_vehicle;
+DROP TABLE IF EXISTS vehicle;
+DROP TABLE IF EXISTS vehicle_model;
