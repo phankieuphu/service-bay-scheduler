@@ -27,6 +27,7 @@ resources:
   - vehicle-service/hpa.yaml
   - identity-service/secret.yaml
   - identity-service/deployment.yaml
+  - billing-service/deployment.yaml
 
 # Grafana dashboards, mounted at /etc/grafana/dashboards. This directory is the
 # single source: docker-compose mounts the same files. No name hash, so an
