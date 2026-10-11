@@ -24,6 +24,10 @@ type Database struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
+	// AutoMigrate applies pending migrations (migrations/*.sql) on startup.
+	// Turn it off to run them separately, e.g. with cmd/migrate as a k8s
+	// Job before a rollout.
+	AutoMigrate bool
 }
 
 type API struct {
@@ -74,6 +78,7 @@ func LoadConfig() *Config {
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
 			ConnMaxLifetime: time.Duration(getEnvInt("DB_CONN_MAX_LIFETIME_SEC", 1800)) * time.Second,
+			AutoMigrate:     getEnvBool("DB_AUTO_MIGRATE", true),
 		},
 		API: API{
 			Port:         GetEnv("API_PORT", "8080"),

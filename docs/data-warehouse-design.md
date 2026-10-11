@@ -9,7 +9,7 @@ Related documents:
 - `business-requirement.md` — the business processes this warehouse measures (§4–§9)
 - `architecture-design.md` — service map, event contracts, data ownership rules (§1, §3, §5)
 - `technical-requirement.md` — scale targets and the 1k / 100k / 1M load-test tiers (§2)
-- `postgres/init/02`–`08` — the OLTP schemas that are the warehouse's sources
+- `customer-service/migrations`, `vehicle-service/migrations` and `postgres/init/04`–`08`: the OLTP schemas that are the warehouse's sources
 
 ---
 

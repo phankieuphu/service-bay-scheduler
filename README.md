@@ -92,7 +92,7 @@ This runs all three services and every piece of infrastructure. You only need Do
    docker compose up -d --build
    ```
 
-   On first start, Postgres runs [postgres/init/](postgres/init/): it creates one database per service (`identity_db`, `customer_db`, `vehicle_db`, …), their tables, and seed customers and vehicles. The services wait for Postgres to be healthy.
+   On first start, Postgres runs [postgres/init/](postgres/init/), which creates one database per service (`identity_db`, `customer_db`, `vehicle_db`, …). identity-, customer- and vehicle-service then create their own tables by applying their migrations on startup. The one-shot `db-seed` container waits for those tables and loads seed customers and vehicles. The services wait for Postgres to be healthy.
 
 3. Check that everything is up:
 
@@ -145,7 +145,16 @@ docker compose down                                # stop, keep data
 docker compose down -v                             # stop and delete all data
 ```
 
-Postgres only runs the init scripts when its data volume is empty. After changing a schema in `postgres/init/`, run `docker compose down -v` (this deletes all local data) and start again.
+**Schema changes.** identity-, customer- and vehicle-service own their schemas as numbered [goose](https://github.com/pressly/goose) migrations in `<service>/migrations/`, embedded in the binary. Each service applies pending ones on startup under a Postgres advisory lock, so replicas take turns. Existing volumes pick up changes without `down -v`:
+
+```bash
+cd vehicle-service
+go run ./cmd/migrate status        # what's applied (same DB_* env as the server)
+go run ./cmd/migrate up            # apply pending (the server does this itself unless DB_AUTO_MIGRATE=false)
+go run ./cmd/migrate down          # roll back the latest one
+```
+
+`00001_baseline.sql` is the schema the old init scripts created, written as `IF NOT EXISTS`, so a volume built by those scripts adopts it as-is. `postgres/init/` now only creates the databases, plus schemas (`04`–`08`) for services that aren't built yet, and those only run on an empty volume. Seeds are dev-only: `db-seed` in docker-compose (leave it out with `--scale db-seed=0`), or `sh postgres/seed/seed.sh`. Re-running them skips tables that already have rows.
 
 ---
 
@@ -214,7 +223,7 @@ go test ./internal/domain/services/ -run TestVehicleService_TransferVehicle   # 
 
 Test files must end in `_test.go` (underscore). A file ending in `-test.go` compiles as normal source, and `go test` never runs its tests.
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every PR and push to `master`: `gofmt -l`, `go build`, `go vet` and `go test -race` per service, `npm run build` and `npm run lint` for the frontend, a `docker build` of each service, and `postgres/init` plus seeds on an empty database. Run `gofmt -w .` before pushing, or the `gofmt` step fails.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every PR and push to `master`: `gofmt -l`, `go build`, `go vet` and `go test -race` per service, `npm run build` and `npm run lint` for the frontend, a `docker build` of each service, and `postgres/init`, every service's migrations (twice, to check they're idempotent) and the seeds on an empty database. The Go jobs also run the migrations tests against a Postgres service container. Run `gofmt -w .` before pushing, or the `gofmt` step fails.
 
 Against a running stack:
 
@@ -404,11 +413,11 @@ Kafka consumer ──────┘                  │
 1. Add the interface method in `internal/domain/ports/`.
 2. Implement it in `internal/domain/services/` and add a `_test.go` using the existing mocks.
 3. Add the repository method in `internal/adapters/repository/`, and a GORM model in `internal/adapters/database/models/` if there's a new table.
-4. Add the SQL to that service's file in `postgres/init/` (then `docker compose down -v` locally).
+4. Add the SQL as the next numbered file in that service's `migrations/` (`-- +goose Up` / `-- +goose Down`). Never edit a migration that has shipped. It's applied the next time the service starts.
 5. Add the handler and DTOs in `internal/adapters/http/`, and register the route in `server.go`.
 6. For a new Kafka event, write it to the outbox inside the same transaction, and document its contract in [architecture-design.md](docs/architecture-design.md).
 
-A new service copies an existing one (customer-service is the smallest) and gets its own database in `postgres/init/00-create-databases.sql`, a compose entry and a `k8s/base/` folder.
+A new service copies an existing one (customer-service is the smallest) and gets its own database in `postgres/init/00-create-databases.sql`, its own `migrations/` (move its `postgres/init/0N-*.sql` schema there as the baseline), a compose entry and a `k8s/base/` folder.
 
 ---
 

@@ -1,3 +1,10 @@
+-- Baseline: the schema postgres/init/01-identity-service.sql used to create.
+-- Every statement is IF NOT EXISTS, so a database that init script already
+-- built (an existing volume) adopts this migration instead of failing on
+-- it, and picks up anything it was missing. Later changes go in new,
+-- numbered files: never edit a migration that has shipped.
+
+-- +goose Up
 -- =============================================================
 -- identity_db — identity-service
 -- =============================================================
@@ -19,9 +26,7 @@
 -- §5a), so it's unambiguous in every service that stores it.
 -- =============================================================
 
-\connect identity_db
-
-CREATE TABLE app_user (
+CREATE TABLE IF NOT EXISTS app_user (
     id            uuid PRIMARY KEY,
     email         varchar(255) NOT NULL,     -- stored lowercased
     password_hash varchar(255) NOT NULL,     -- bcrypt, never plain text
@@ -35,13 +40,13 @@ CREATE TABLE app_user (
 
 -- Case-insensitive uniqueness, and the index the login lookup
 -- (WHERE lower(email) = lower($1)) uses.
-CREATE UNIQUE INDEX uq_app_user_email ON app_user (lower(email));
+CREATE UNIQUE INDEX IF NOT EXISTS uq_app_user_email ON app_user (lower(email));
 
 -- Transactional outbox: a row is inserted here in the same transaction as
 -- the app_user write it describes, then relayed to Kafka by a poller
 -- (see internal/adapters/kafka.OutboxRelay) — see architecture-design.md
 -- §"Every service also writes an outbox row...".
-CREATE TABLE outbox_message (
+CREATE TABLE IF NOT EXISTS outbox_message (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     topic        varchar(255) NOT NULL,
     message_key  varchar(255) NOT NULL,
@@ -52,4 +57,8 @@ CREATE TABLE outbox_message (
 
 -- Partial index so the relay's poll (WHERE published_at IS NULL) stays
 -- cheap regardless of how many published rows have piled up.
-CREATE INDEX idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;
+
+-- +goose Down
+DROP TABLE IF EXISTS outbox_message;
+DROP TABLE IF EXISTS app_user;

@@ -25,6 +25,14 @@ kind load docker-image customer-service:local vehicle-service:local identity-ser
 kubectl apply -k k8s/
 ```
 
+The postgres image only creates the databases. identity-, customer- and vehicle-service apply their migrations when they start, and with two or more replicas an advisory lock makes them take turns. For the dev seed data, run this once the services are up:
+
+```sh
+kubectl -n service-bay exec postgres-0 -- sh /seed/seed.sh
+```
+
+To run migrations as a separate step instead, for example a Job before a rollout, set `DB_AUTO_MIGRATE=false` on the deployment and run `/migrate up` from the same image with the same env. Each service image ships `/migrate` (`up`, `down`, `status`) next to `/server`.
+
 ## Load-test tiers (issue #38)
 
 Manifests live in `base/`; `kubectl apply -k k8s/` deploys the base, which is sized for the **1k** tier. Each tier from the [issue #38 sizing plan](https://github.com/phankieuphu/service-bay-scheduler/issues/38) is a kustomize overlay under `overlays/`:
