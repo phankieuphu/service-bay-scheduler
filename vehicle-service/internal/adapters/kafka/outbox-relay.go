@@ -2,9 +2,9 @@ package kafka
 
 import (
 	"context"
+	"time"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
-	"time"
 )
 
 // outboxRelayBatchSize caps how many rows a single poll claims, so one

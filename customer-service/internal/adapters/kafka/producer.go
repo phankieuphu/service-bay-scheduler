@@ -2,9 +2,9 @@ package kafka
 
 import (
 	"context"
-	"errors"
 	"customer-service/config"
 	"customer-service/pkg/logger"
+	"errors"
 
 	"github.com/IBM/sarama"
 )
