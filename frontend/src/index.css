@@ -16,6 +16,7 @@
   --neutral: #5f5869;
   --neutral-bg: #f1f0f3;
   --dashed: #c9c5d1;
+  --accent-tint: #f5f3ff;
 
   font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light dark;
@@ -42,6 +43,7 @@
     --neutral: #9ca3af;
     --neutral-bg: #2a2b33;
     --dashed: #4a4c58;
+    --accent-tint: rgba(167, 139, 250, 0.1);
   }
 }
 

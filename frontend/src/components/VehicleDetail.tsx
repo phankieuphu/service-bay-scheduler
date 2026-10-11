@@ -58,14 +58,14 @@ export function VehicleDetail({ vehicleId, onUpdated }: Props) {
 
   if (loadError) {
     return (
-      <section className="card">
+      <section className="panel">
         <p className="message error flush">{loadError}</p>
       </section>
     )
   }
   if (!vehicle) {
     return (
-      <section className="card">
+      <section className="panel">
         <p className="muted">Loading vehicle…</p>
       </section>
     )
@@ -74,7 +74,7 @@ export function VehicleDetail({ vehicleId, onUpdated }: Props) {
   const scrapped = vehicle.status === 'SCRAPPED'
 
   return (
-    <section className="card stack roomy" aria-labelledby="vehicle-detail-heading">
+    <section className="panel stack roomy" aria-labelledby="vehicle-detail-heading">
       <div className="detail-header">
         <div className="title-block">
           <h2 id="vehicle-detail-heading">

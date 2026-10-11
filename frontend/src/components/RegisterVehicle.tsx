@@ -73,7 +73,7 @@ export function RegisterVehicle({ onOpen }: { onOpen: (vehicleId: number) => voi
   }
 
   return (
-    <section className="panel narrow stack" aria-labelledby="register-vehicle-heading">
+    <section className="card narrow stack" aria-labelledby="register-vehicle-heading">
       <h2 id="register-vehicle-heading">Register a vehicle</h2>
       <form className="form-grid" onSubmit={handleSubmit}>
         <label htmlFor="register-vin">VIN</label>

@@ -66,7 +66,7 @@ export function VehicleSearch({ selectedId, updated, onSelect }: Props) {
   }
 
   return (
-    <section className="panel stack" aria-labelledby="vehicle-search-heading">
+    <section className="card stack" aria-labelledby="vehicle-search-heading">
       <h2 id="vehicle-search-heading">Find a vehicle</h2>
       <form className="field-grid" onSubmit={handleSearch}>
         <label className="field" htmlFor="search-plate">
