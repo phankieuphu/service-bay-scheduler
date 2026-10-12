@@ -9,6 +9,8 @@
 set -uo pipefail
 . "$(dirname "$0")/../lib/common.sh"
 
+ensure_access_token
+AUTH="Authorization: Bearer $ACCESS_TOKEN"
 C="$CUSTOMER_URL/api/v1"
 V="$VEHICLE_URL/api/v1"
 RUN="$(date +%s)-$$"
@@ -18,9 +20,9 @@ pass=0 fail=0 skip=0
 req() {
   local out
   if [ -n "${3:-}" ]; then
-    out=$(curl -s -m 10 -w '\n%{http_code}' -X "$1" -H 'Content-Type: application/json' -d "$3" "$2")
+    out=$(curl -s -m 10 -w '\n%{http_code}' -X "$1" -H "$AUTH" -H 'Content-Type: application/json' -d "$3" "$2")
   else
-    out=$(curl -s -m 10 -w '\n%{http_code}' -X "$1" "$2")
+    out=$(curl -s -m 10 -w '\n%{http_code}' -X "$1" -H "$AUTH" "$2")
   fi
   STATUS="${out##*$'\n'}"
   BODY="${out%$'\n'*}"
@@ -53,6 +55,13 @@ echo "== infra"
 req GET "$CUSTOMER_URL/metrics"; expect "customer-service GET /metrics" 200
 req GET "$VEHICLE_URL/metrics";  expect "vehicle-service GET /metrics" 200
 [ "$fail" -eq 0 ] || { echo "services not reachable — aborting"; exit 1; }
+
+echo "== auth"
+# unauth <method> <url> — sets STATUS for a request with no bearer token.
+unauth() { STATUS=$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X "$1" "$2"); BODY=""; }
+unauth GET "$C/customer"; expect "GET /customer without a token -> 401" 401
+unauth GET "$V/vehicle/1"; expect "GET /vehicle/:id without a token -> 401" 401
+unauth POST "$V/transfer"; expect "POST /transfer without a token -> 401" 401
 
 echo "== customer-service: create"
 EMAIL="lt-smoke-$RUN@example.com"
@@ -112,7 +121,7 @@ if [ -n "$ID" ] && [ -n "$UPDATED" ]; then
   req GET "$C/customer/$ID"; UPDATED=$(json_field updated_at)
   tmp=$(mktemp -d)
   for n in 1 2 3; do
-    curl -s -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Type: application/json' \
+    curl -s -o /dev/null -w '%{http_code}' -X PUT -H "$AUTH" -H 'Content-Type: application/json' \
       -d "{\"name\":\"Race $n\",\"updated_at\":\"$UPDATED\"}" "$C/customer/$ID" >"$tmp/$n" &
   done
   wait
@@ -162,7 +171,7 @@ if [ "$SMOKE_VEHICLE_ID" -gt 0 ] && transfers_enabled; then
   # same vehicle from its owner — exactly one may win.
   tmp=$(mktemp -d)
   for to in "$B" $((B + 1)) $((B + 2)); do
-    curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    curl -s -o /dev/null -w '%{http_code}' -X POST -H "$AUTH" -H 'Content-Type: application/json' \
       -d "{\"vehicle_id\":$VID,\"from\":$A,\"to\":$to}" "$V/transfer" >"$tmp/$to" &
   done
   wait

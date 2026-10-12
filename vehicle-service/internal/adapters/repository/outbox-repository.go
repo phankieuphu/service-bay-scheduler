@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
+	"time"
 	"vehicle-service/internal/adapters/database/models"
 	database_provider "vehicle-service/internal/adapters/database/provider"
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
-	"time"
 
 	"gorm.io/gorm"
 )

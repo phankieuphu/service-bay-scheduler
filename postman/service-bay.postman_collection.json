@@ -31,7 +31,7 @@
                 "register"
               ]
             },
-            "description": "Role: CUSTOMER (default) | TECHNICIAN | MANAGER | ADMIN. Password 8-72 chars.",
+            "description": "Only CUSTOMER (the default) can self-register; staff are created via Admin > Create user. Password 8-72 chars. 429 when rate-limited.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"role\": \"CUSTOMER\"\n}",
@@ -79,7 +79,7 @@
                 "login"
               ]
             },
-            "description": "Stores accessToken / refreshToken in collection variables.",
+            "description": "Stores accessToken in a collection variable. The refresh token comes back as an HttpOnly refresh_token cookie, kept in Postman's cookie jar (needs AUTH_COOKIE_SECURE=false over plain HTTP, as docker-compose sets).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
@@ -99,8 +99,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }",
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.refresh_token !== undefined) pm.collectionVariables.set('refreshToken', j.refresh_token); }"
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }"
                 ]
               }
             }
@@ -112,8 +111,8 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "X-Requested-With",
+                "value": "postman"
               }
             ],
             "url": {
@@ -128,16 +127,7 @@
                 "refresh"
               ]
             },
-            "description": "Rotates the token pair.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
+            "description": "Sends the refresh_token cookie; X-Requested-With is required. Rotates the cookie and returns a new access token.",
             "auth": {
               "type": "noauth"
             }
@@ -148,8 +138,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }",
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.refresh_token !== undefined) pm.collectionVariables.set('refreshToken', j.refresh_token); }"
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }"
                 ]
               }
             }
@@ -190,8 +179,8 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "X-Requested-With",
+                "value": "postman"
               }
             ],
             "url": {
@@ -206,20 +195,117 @@
                 "logout"
               ]
             },
-            "description": "Revokes the refresh token. 204 on success.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
+            "description": "Revokes the refresh_token cookie's token and clears the cookie. X-Requested-With is required. 204 on success.",
             "auth": {
               "type": "noauth"
             }
           }
+        },
+        {
+          "name": "Admin",
+          "description": "Needs an ADMIN access token: log in as the bootstrap admin (ADMIN_EMAIL / ADMIN_PASSWORD) first.",
+          "item": [
+            {
+              "name": "Create user",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/v1/admin/users",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ]
+                },
+                "description": "Any role: CUSTOMER | TECHNICIAN | MANAGER | ADMIN. Emits UserCreated.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"staff.{{$timestamp}}@example.com\",\n  \"password\": \"{{userPassword}}\",\n  \"role\": \"TECHNICIAN\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{accessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('staffUserId', j.id); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Set user status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/v1/admin/users/{{staffUserId}}",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users",
+                    "{{staffUserId}}"
+                  ]
+                },
+                "description": "ACTIVE | INACTIVE | LOCKED. Emits UserUpdated. Not allowed on your own account.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"LOCKED\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{accessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         },
         {
           "name": "Ops",
@@ -290,7 +376,7 @@
     },
     {
       "name": "Customer Service",
-      "description": "customer-service (:8080).",
+      "description": "customer-service (:8080). Needs a staff access token (log in as the bootstrap admin); DELETE needs MANAGER or ADMIN.",
       "item": [
         {
           "name": "Create customer",
@@ -324,7 +410,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -369,7 +462,14 @@
             },
             "description": "Cursor-paginated.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -392,7 +492,14 @@
             },
             "description": "Stores updated_at for optimistic-lock on Update.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -440,7 +547,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -463,7 +577,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -536,7 +657,7 @@
     },
     {
       "name": "Vehicle Service",
-      "description": "vehicle-service (:8081).",
+      "description": "vehicle-service (:8081). Needs an access token; writes need a staff role.",
       "item": [
         {
           "name": "Register vehicle",
@@ -570,7 +691,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -644,7 +772,14 @@
             },
             "description": "Cursor-paginated with optional filters.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -667,7 +802,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -715,7 +857,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -753,7 +902,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -789,7 +945,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -813,7 +976,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -845,7 +1015,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -876,7 +1053,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -900,7 +1084,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -970,244 +1161,6 @@
           ]
         }
       ]
-    },
-    {
-      "name": "Billing Service",
-      "description": "billing_service (Spring Boot, :8084).",
-      "item": [
-        {
-          "name": "Create bill",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{billingUrl}}/api/v1/bills",
-              "host": [
-                "{{billingUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "bills"
-              ]
-            },
-            "description": "appointmentId/customerId/vehicleId required; fees must be non-negative.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"appointmentId\": 1,\n  \"customerId\": {{customerId}},\n  \"vehicleId\": {{vehicleId}},\n  \"warrantyFee\": 0,\n  \"serviceFee\": 500000,\n  \"materialCost\": 250000\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('billId', j.id); }"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Get bill",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
-              "host": [
-                "{{billingUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "bills",
-                "{{billId}}"
-              ]
-            },
-            "description": "",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "List bills by customer",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{billingUrl}}/api/v1/bills?customerId={{customerId}}",
-              "host": [
-                "{{billingUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "bills"
-              ],
-              "query": [
-                {
-                  "key": "customerId",
-                  "value": "{{customerId}}",
-                  "description": ""
-                }
-              ]
-            },
-            "description": "",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Record payment",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
-              "host": [
-                "{{billingUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "bills",
-                "{{billId}}",
-                "payments"
-              ]
-            },
-            "description": "type: DEPOSIT | FINAL. amount > 0.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"DEPOSIT\",\n  \"method\": \"CASH\",\n  \"amount\": 100000\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "List payments",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
-              "host": [
-                "{{billingUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "bills",
-                "{{billId}}",
-                "payments"
-              ]
-            },
-            "description": "",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Void bill",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/void",
-              "host": [
-                "{{billingUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "bills",
-                "{{billId}}",
-                "void"
-              ]
-            },
-            "description": "",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Ops",
-          "item": [
-            {
-              "name": "Actuator health",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{billingUrl}}/actuator/health",
-                  "host": [
-                    "{{billingUrl}}"
-                  ],
-                  "path": [
-                    "actuator",
-                    "health"
-                  ]
-                },
-                "description": "",
-                "auth": {
-                  "type": "noauth"
-                }
-              }
-            },
-            {
-              "name": "Actuator info",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{billingUrl}}/actuator/info",
-                  "host": [
-                    "{{billingUrl}}"
-                  ],
-                  "path": [
-                    "actuator",
-                    "info"
-                  ]
-                },
-                "description": "",
-                "auth": {
-                  "type": "noauth"
-                }
-              }
-            }
-          ]
-        }
-      ]
     }
   ],
   "variable": [
@@ -1243,11 +1196,6 @@
     },
     {
       "key": "accessToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "refreshToken",
       "value": "",
       "type": "string"
     },

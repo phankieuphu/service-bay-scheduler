@@ -12,6 +12,7 @@ type Config struct {
 	Kafka
 	Redis
 	Logger
+	JWT
 }
 
 type Database struct {
@@ -24,6 +25,10 @@ type Database struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
+	// AutoMigrate applies pending migrations (migrations/*.sql) on startup.
+	// Turn it off to run them separately, e.g. with cmd/migrate as a k8s
+	// Job before a rollout.
+	AutoMigrate bool
 }
 
 type API struct {
@@ -62,6 +67,13 @@ type Logger struct {
 	AddSource bool
 }
 
+// JWT verifies identity-service's access tokens. Secret and Issuer must
+// match identity-service's JWT_SECRET and JWT_ISSUER.
+type JWT struct {
+	Secret string
+	Issuer string
+}
+
 func LoadConfig() *Config {
 	return &Config{
 		Database: Database{
@@ -74,6 +86,7 @@ func LoadConfig() *Config {
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
 			ConnMaxLifetime: time.Duration(getEnvInt("DB_CONN_MAX_LIFETIME_SEC", 1800)) * time.Second,
+			AutoMigrate:     getEnvBool("DB_AUTO_MIGRATE", true),
 		},
 		API: API{
 			Port:         GetEnv("API_PORT", "8080"),
@@ -96,6 +109,10 @@ func LoadConfig() *Config {
 			Level:     GetEnv("LOG_LEVEL", "info"),
 			Format:    GetEnv("LOG_FORMAT", "json"),
 			AddSource: getEnvBool("LOG_ADD_SOURCE", false),
+		},
+		JWT: JWT{
+			Secret: GetEnv("JWT_SECRET", ""),
+			Issuer: GetEnv("JWT_ISSUER", "identity-service"),
 		},
 	}
 }

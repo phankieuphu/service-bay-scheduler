@@ -50,6 +50,7 @@ rand_between() {
 }
 
 engine_init() {
+  ensure_access_token
   SCENARIO="$1"
   RUN_ID="$(date +%Y%m%d-%H%M%S)"
   RESULTS="${RESULTS:-$LOADTEST_DIR/results/sh-$SCENARIO-$TIER-$RUN_ID}"
@@ -94,13 +95,15 @@ write_batch() {
       -v cmin="$CUSTOMER_ID_MIN" -v cmax="$CUSTOMER_ID_MAX" \
       -v vmin="$VEHICLE_ID_MIN" -v vmax="$VEHICLE_ID_MAX" \
       -v tseq="$TRANSFER_SEQ" -v tstart="$TRANSFER_VEHICLE_START" -v tpool="$TRANSFER_POOL" \
-      -v ta="$TRANSFER_CUSTOMER_A" -v tb="$TRANSFER_CUSTOMER_B" -v timeout="$REQ_TIMEOUT" '
+      -v ta="$TRANSFER_CUSTOMER_A" -v tb="$TRANSFER_CUSTOMER_B" -v timeout="$REQ_TIMEOUT" \
+      -v token="$ACCESS_TOKEN" '
     function rid(lo, hi) { return lo + int(rand() * (hi - lo + 1)) }
     function start(url, op) {
       if (blocks++) print "next"
       print "url = \"" url "\""
       print "output = \"/dev/null\""
       print "max-time = " timeout
+      print "header = \"Authorization: Bearer " token "\""
       print "write-out = \"" tick " " phase " " op " %{http_code} %{time_total}\\n\""
     }
     function post(url, op, body) {
@@ -139,14 +142,15 @@ write_batch() {
 op_update() {
   local id out meta body updated
   id=$(rand_between "$LT_CUSTOMER_MIN" "$LT_CUSTOMER_MAX")
-  out=$(curl -s -m "$REQ_TIMEOUT" -w '\n%{http_code} %{time_total}' "$CUSTOMER_URL/api/v1/customer/$id")
+  out=$(curl -s -m "$REQ_TIMEOUT" -w '\n%{http_code} %{time_total}' -H "Authorization: Bearer $ACCESS_TOKEN" \
+    "$CUSTOMER_URL/api/v1/customer/$id")
   meta="${out##*$'\n'}"
   body="${out%$'\n'*}"
   echo "$1 $2 cust_update_get $meta" >>"$RAW/$1.chain"
   [ "${meta%% *}" = "200" ] || return 0
   updated=$(printf '%s' "$body" | sed -n 's/.*"updated_at"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
   curl -s -m "$REQ_TIMEOUT" -o /dev/null -w "$1 $2 cust_update_put %{http_code} %{time_total}\n" \
-    -X PUT -H 'Content-Type: application/json' \
+    -X PUT -H 'Content-Type: application/json' -H "Authorization: Bearer $ACCESS_TOKEN" \
     -d "{\"name\":\"Load Test $id $1\",\"updated_at\":\"$updated\"}" \
     "$CUSTOMER_URL/api/v1/customer/$id" >>"$RAW/$1.chain"
 }
@@ -156,7 +160,7 @@ op_update() {
 op_create_delete() {
   local out meta id
   out=$(curl -s -m "$REQ_TIMEOUT" -w '\n%{http_code} %{time_total}' \
-    -X POST -H 'Content-Type: application/json' \
+    -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer $ACCESS_TOKEN" \
     -d "{\"name\":\"Load Test Delete\",\"email\":\"lt-$RUN_ID-del-$1-$3@example.com\",\"birth_day\":\"1990-01-01T00:00:00Z\"}" \
     "$CUSTOMER_URL/api/v1/customer")
   meta="${out##*$'\n'}"
@@ -165,7 +169,7 @@ op_create_delete() {
   id=$(printf '%s' "${out%$'\n'*}" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')
   [ -n "$id" ] || return 0
   curl -s -m "$REQ_TIMEOUT" -o /dev/null -w "$1 $2 cust_delete %{http_code} %{time_total}\n" \
-    -X DELETE "$CUSTOMER_URL/api/v1/customer/$id" >>"$RAW/$1.chain"
+    -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" "$CUSTOMER_URL/api/v1/customer/$id" >>"$RAW/$1.chain"
 }
 
 # fire_tick <tick> <rate> <phase>

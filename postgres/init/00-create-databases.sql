@@ -10,6 +10,12 @@
 -- once one service's load actually demands it. What matters now is
 -- that no two services' tables live in the same database, so a
 -- cross-schema foreign key is never even possible by accident.
+--
+-- identity-, customer- and vehicle-service own their tables through
+-- migrations (<service>/migrations, applied on startup), so their
+-- databases are only created here. The 04-08 scripts are schemas for
+-- services that aren't built yet; each moves into its service's
+-- migrations when that service is.
 -- =============================================================
 
 CREATE DATABASE identity_db;

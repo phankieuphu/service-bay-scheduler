@@ -129,8 +129,8 @@ function EditVehicleForm({
     onEdit()
 
     const statusChanged = status !== vehicle.status
-    // An emptied date field means "leave as is": the API can't clear a warranty.
-    const warrantyChanged = warranty !== '' && warranty !== dayFromApi(vehicle.warranty_end_date)
+    // An emptied date field clears the warranty.
+    const warrantyChanged = warranty !== dayFromApi(vehicle.warranty_end_date)
     if (!statusChanged && !warrantyChanged) {
       setError('Nothing to update.')
       return
@@ -141,7 +141,7 @@ function EditVehicleForm({
       onSaved(
         await updateVehicle(vehicle.id, {
           status: statusChanged ? status : undefined,
-          warranty_end_date: warrantyChanged ? dayToApi(warranty) : undefined,
+          warranty_end_date: warrantyChanged ? (warranty === '' ? null : dayToApi(warranty)) : undefined,
           updated_at: vehicle.updated_at,
         }),
         false,
@@ -194,7 +194,7 @@ function EditVehicleForm({
       <span className="hint span-all">
         {status === 'SCRAPPED' && vehicle.status !== 'SCRAPPED'
           ? 'Scrapping is final: the vehicle can’t be edited or given an owner afterwards.'
-          : 'If someone else changed this vehicle since you opened it, it’s reloaded and you can save again.'}
+          : 'Empty the date to remove the warranty. If someone else changed this vehicle since you opened it, it’s reloaded and you can save again.'}
       </span>
       {error && <p className="message error flush span-all">{error}</p>}
     </form>

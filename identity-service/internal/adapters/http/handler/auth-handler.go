@@ -15,12 +15,14 @@ import (
 )
 
 type AuthHandler struct {
-	service ports.AuthService
-	tokens  ports.TokenIssuer
+	service  ports.AuthService
+	tokens   ports.TokenIssuer
+	throttle *Throttle // nil disables rate limiting
+	cookies  RefreshCookies
 }
 
-func NewAuthHandler(service ports.AuthService, tokens ports.TokenIssuer) *AuthHandler {
-	return &AuthHandler{service: service, tokens: tokens}
+func NewAuthHandler(service ports.AuthService, tokens ports.TokenIssuer, throttle *Throttle, cookies RefreshCookies) *AuthHandler {
+	return &AuthHandler{service: service, tokens: tokens, throttle: throttle, cookies: cookies}
 }
 
 func (h *AuthHandler) RegisterRoutes(r *gin.RouterGroup) {
@@ -38,6 +40,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Every attempt counts, not just failures: what's being limited is
+	// mass account creation, which is a stream of successes.
+	if t := h.throttle; t != nil {
+		limits := t.registerLimits(c.ClientIP())
+		if wait, blocked := t.blocked(c.Request.Context(), limits); blocked {
+			tooManyRequests(c, wait)
+			return
+		}
+		t.add(c.Request.Context(), limits, t.cfg.RegisterWindow)
 	}
 
 	user, err := h.service.Register(c.Request.Context(), entity.Register{
@@ -60,43 +73,74 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Checked before the password, so a locked-out email costs no bcrypt
+	// work. The 429 is the same whether or not the email has an account.
+	var limits []limit
+	if t := h.throttle; t != nil {
+		limits = t.loginLimits(c.ClientIP(), req.Email)
+		if wait, blocked := t.blocked(c.Request.Context(), limits); blocked {
+			tooManyRequests(c, wait)
+			return
+		}
+	}
+
 	pair, err := h.service.Login(c.Request.Context(), req.Email, req.Password)
+	if t := h.throttle; t != nil {
+		switch {
+		case errors.Is(err, ports.ErrInvalidCredentials):
+			t.add(c.Request.Context(), limits, t.cfg.LoginWindow)
+		case err == nil:
+			// Only the email's count: resetting the IP's would let one valid
+			// account clear the way for guessing at others.
+			t.reset(c.Request.Context(), loginEmailKey(req.Email))
+		}
+	}
 	if err != nil {
 		writeError(c, err)
 		return
 	}
 
+	h.cookies.set(c, pair.RefreshToken, pair.RefreshExpiresAt)
 	c.JSON(http.StatusOK, dto.NewTokenResponse(pair, time.Now()))
 }
 
+// Refresh reads the refresh token from its cookie (never the body) and
+// sets the rotated one the same way.
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	var req dto.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	token, ok := h.cookies.read(c, true)
+	if !ok {
 		return
 	}
 
-	pair, err := h.service.Refresh(c.Request.Context(), req.RefreshToken)
+	pair, err := h.service.Refresh(c.Request.Context(), token)
 	if err != nil {
+		// The token is spent or invalid either way; don't keep sending it.
+		if errors.Is(err, ports.ErrInvalidToken) || errors.Is(err, ports.ErrUserInactive) {
+			h.cookies.clear(c)
+		}
 		writeError(c, err)
 		return
 	}
 
+	h.cookies.set(c, pair.RefreshToken, pair.RefreshExpiresAt)
 	c.JSON(http.StatusOK, dto.NewTokenResponse(pair, time.Now()))
 }
 
+// Logout revokes the cookie's refresh token, if any, and clears the cookie.
 func (h *AuthHandler) Logout(c *gin.Context) {
-	var req dto.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	token, ok := h.cookies.read(c, false)
+	if !ok {
 		return
 	}
 
-	if err := h.service.Logout(c.Request.Context(), req.RefreshToken); err != nil {
-		writeError(c, err)
-		return
+	if token != "" {
+		if err := h.service.Logout(c.Request.Context(), token); err != nil {
+			writeError(c, err)
+			return
+		}
 	}
 
+	h.cookies.clear(c)
 	c.Status(http.StatusNoContent)
 }
 
@@ -126,8 +170,10 @@ func writeError(c *gin.Context, err error) {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, ports.ErrInvalidCredentials), errors.Is(err, ports.ErrInvalidToken):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-	case errors.Is(err, ports.ErrUserInactive):
+	case errors.Is(err, ports.ErrUserInactive), errors.Is(err, ports.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, ports.ErrInvalidInput):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, ports.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	default:

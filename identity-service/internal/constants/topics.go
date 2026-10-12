@@ -10,7 +10,7 @@ type UserEventType string
 
 const (
 	UserCreated UserEventType = "UserCreated"
-	// UserUpdated is part of the contract but not emitted yet: none of the
-	// current endpoints change a user after registration.
+	// UserUpdated is emitted when an admin changes a user's status
+	// (PATCH /admin/users/:id).
 	UserUpdated UserEventType = "UserUpdated"
 )

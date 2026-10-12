@@ -5,6 +5,7 @@ import (
 	"customer-service/config"
 	"customer-service/internal/constants"
 	"customer-service/internal/domain/entity"
+	"customer-service/internal/domain/events"
 	"customer-service/internal/domain/ports"
 	"customer-service/pkg/times"
 	"encoding/json"
@@ -459,11 +460,12 @@ func TestCustomer_CreateCustomer(t *testing.T) {
 			if msg.Topic != constants.CustomerCreated || msg.Key != "7" {
 				t.Fatalf("unexpected topic/key: %q/%q", msg.Topic, msg.Key)
 			}
-			var event entity.Customer
+			var event events.CustomerEvent[events.CustomerState]
 			if err := json.Unmarshal(msg.Payload, &event); err != nil {
 				t.Fatalf("payload is not valid JSON: %v", err)
 			}
-			if event.ID != 7 || event.Email != "leo@example.com" || event.Status != constants.StatusActive {
+			if event.EventType != events.CustomerCreated || event.Customer.ID != 7 ||
+				event.Customer.Email != "leo@example.com" || event.Customer.Status != constants.StatusActive {
 				t.Fatalf("unexpected event payload: %s", msg.Payload)
 			}
 		})

@@ -45,6 +45,23 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8081
+          # /healthz only says the process is up; /readyz also checks
+          # Postgres (and Redis for identity-service). Liveness must not use
+          # /readyz, or a database outage would restart every pod.
+          startupProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            periodSeconds: 2
+            failureThreshold: 30   # up to 60s to connect to Postgres/Kafka
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8081 }
+            periodSeconds: 10
+            timeoutSeconds: 3      # the checks themselves time out at 2s
+            failureThreshold: 3
           envFrom:
             - configMapRef:
                 name: vehicle-service-config
@@ -59,6 +76,12 @@ spec:
                 secretKeyRef:
                   name: postgres-credentials
                   key: POSTGRES_PASSWORD
+            # identity-service's secret: access tokens are verified with it.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: identity-jwt
+                  key: JWT_SECRET
             - name: GOMEMLIMIT # ~85% of the memory limit, so the GC works harder before an OOM kill
               value: "108MiB"
           # Sizes per load-test tier (issue #38); the base is the 1k tier.

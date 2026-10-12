@@ -1,9 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import {
-  PASSWORD_MAX_BYTES,
-  PASSWORD_MIN_LENGTH,
-  type SelfRegisterRole,
-} from '../api/identity'
+import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH } from '../api/identity'
 import { useAuth } from '../auth/auth-context'
 import { describeAuthError } from '../auth/errors'
 
@@ -11,15 +7,9 @@ interface FormState {
   email: string
   password: string
   confirmPassword: string
-  role: SelfRegisterRole
 }
 
-const initialState: FormState = { email: '', password: '', confirmPassword: '', role: 'CUSTOMER' }
-
-const roles: { id: SelfRegisterRole; label: string }[] = [
-  { id: 'CUSTOMER', label: 'Customer' },
-  { id: 'TECHNICIAN', label: 'Technician' },
-]
+const initialState: FormState = { email: '', password: '', confirmPassword: '' }
 
 export function SignUpForm() {
   const { register } = useAuth()
@@ -50,7 +40,7 @@ export function SignUpForm() {
 
     setLoading(true)
     try {
-      await register({ email: form.email.trim(), password: form.password, role: form.role })
+      await register({ email: form.email.trim(), password: form.password })
       // Signed in straight away; AuthProvider switches the app over.
     } catch (err) {
       setError(describeAuthError(err))
@@ -103,24 +93,7 @@ export function SignUpForm() {
         />
       </label>
 
-      <div className="field">
-        <span id="sign-up-role-label">I am a</span>
-        <div className="segmented" role="radiogroup" aria-labelledby="sign-up-role-label">
-          {roles.map((role) => (
-            <label key={role.id} className={form.role === role.id ? 'active' : ''}>
-              <input
-                type="radio"
-                name="role"
-                value={role.id}
-                checked={form.role === role.id}
-                onChange={() => updateField('role', role.id)}
-              />
-              {role.label}
-            </label>
-          ))}
-        </div>
-      </div>
-      <p className="hint flush">Dealership managers and admins are added by an administrator.</p>
+      <p className="hint flush">This creates a customer account. Technicians, managers and admins are added by an administrator.</p>
 
       {error && <p className="message error flush">{error}</p>}
 

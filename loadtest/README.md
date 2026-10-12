@@ -36,6 +36,8 @@ TIER=100k MIX=write ./k6/run.sh stress
 The same commands through make: `make seed`, `make smoke`, `make k6-load TIER=100k`, `make sh-spike`.
 From the repo root: `make loadtest SCENARIO=load TIER=100k [TOOL=sh]`.
 
+**Auth.** The services need an identity-service access token, so the runners log in first as `LOADTEST_EMAIL` / `LOADTEST_PASSWORD`. The defaults are docker-compose's bootstrap admin, `admin@servicebay.local` / `admin-local-dev-pass`, at `IDENTITY_URL` (default `http://localhost:8083`). You can pass a token directly as `ACCESS_TOKEN` instead. The account needs a staff role. Tokens expire after identity-service's `JWT_ACCESS_TTL_SEC` (15 min by default), so for longer runs (soak) raise it on identity-service in the test environment. Otherwise requests start failing with `401` partway through.
+
 Requirements: `curl`, `psql` (seeding only), and [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) for the k6 runners. The sh runners work with macOS's built-in bash 3.2.
 
 ## Scenarios
@@ -99,6 +101,8 @@ Before each load run, the runners call `seed/seed.sh reset` to give the whole po
    PSQL="kubectl -n service-bay exec -i postgres-0 -c postgres -- psql -U postgres" ./seed/seed.sh
    ./k6/in-cluster.sh check          # or: make k8s-check
    ```
+
+   The runners log in from your machine, so point `IDENTITY_URL` at identity-service's NodePort (`http://localhost:30083`) or a port-forward. Create the staff account first: either set the optional `identity-admin` Secret (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) before deploying, or use an admin's `POST /admin/users`.
 
 5. **Run k6 inside the cluster:**
 

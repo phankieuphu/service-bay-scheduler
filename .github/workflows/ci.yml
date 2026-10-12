@@ -1,0 +1,153 @@
+# Build, vet and test every Go service, build and lint the frontend, build
+# the Docker images, and check that postgres/init runs on an empty database.
+# Plain GitHub Actions (not gh-aw): there's no .md source to compile.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  go:
+    name: go (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [customer-service, vehicle-service, identity-service]
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+    # For the migrations tests, which create and drop scratch databases.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: ${{ matrix.service }}/go.mod
+          cache-dependency-path: ${{ matrix.service }}/go.sum
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Run gofmt -w on these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  billing-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: billing-service
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+      # build = compile + unit and Testcontainers tests (Docker is available
+      # on GitHub's Ubuntu runners) + the boot jar.
+      - run: ./gradlew build --no-daemon
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+
+  docker:
+    name: docker (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [customer-service, vehicle-service, identity-service, billing-service]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: docker build
+        run: docker buildx build --load -t ${{ matrix.service }}:ci ${{ matrix.service }}
+
+  postgres:
+    # Builds every database the way a fresh docker-compose volume does:
+    # postgres/init on the empty volume (CREATE DATABASE, plus schemas for
+    # services not built yet), each service's migrations, then the dev
+    # seeds. A broken init script shows up as a container that exits (#50).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run postgres/init on an empty database
+        run: |
+          image=$(sed -n 's/^ *image: \(postgres:.*\)$/\1/p' docker-compose.yml | head -1)
+          docker run -d --name pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
+            -v "$PWD/postgres/init:/docker-entrypoint-initdb.d:ro" \
+            -v "$PWD/postgres/seed:/seed:ro" \
+            "$image"
+          for _ in $(seq 1 90); do
+            if [ "$(docker inspect -f '{{.State.Running}}' pg)" != "true" ]; then
+              echo "::error::postgres exited while running the init scripts"
+              docker logs pg
+              exit 1
+            fi
+            if docker logs pg 2>&1 | grep -q "PostgreSQL init process complete" \
+              && docker exec pg pg_isready -U postgres >/dev/null; then
+              docker exec pg psql -U postgres -Atc "SELECT datname FROM pg_database ORDER BY 1"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::postgres did not become ready in 180s"
+          docker logs pg
+          exit 1
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: identity-service/go.mod
+          cache-dependency-path: "*/go.sum"
+      - name: Apply each service's migrations
+        run: |
+          for svc in identity customer vehicle; do
+            (cd "$svc-service" && DB_HOST=localhost DB_PASSWORD=postgres DB_NAME="${svc}_db" go run ./cmd/migrate up)
+          done
+      - name: Load the dev seeds
+        run: |
+          docker exec pg sh /seed/seed.sh
+          docker exec pg psql -U postgres -d customer_db -Atc "SELECT 'customers', count(*) FROM customer"
+          docker exec pg psql -U postgres -d vehicle_db -Atc "SELECT 'vehicles', count(*) FROM vehicle"
+      - name: Migrations are idempotent
+        run: |
+          for svc in identity customer vehicle; do
+            (cd "$svc-service" && DB_HOST=localhost DB_PASSWORD=postgres DB_NAME="${svc}_db" go run ./cmd/migrate up | tee /dev/stderr | grep -q "no pending migrations")
+          done

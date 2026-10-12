@@ -6,16 +6,20 @@ import (
 	"identity-service/internal/adapters/cache"
 	database_provider "identity-service/internal/adapters/database/provider"
 	ginhttp "identity-service/internal/adapters/http"
+	"identity-service/internal/adapters/http/handler"
 	"identity-service/internal/adapters/kafka"
 	"identity-service/internal/adapters/repository"
 	"identity-service/internal/adapters/security"
+	"identity-service/internal/domain/ports"
 	"identity-service/internal/domain/services"
+	"identity-service/migrations"
 	"identity-service/pkg/logger"
 	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
 	health "github.com/phankieuphu/go-health-check"
+	"gorm.io/gorm"
 )
 
 // outboxRelayInterval is how often the outbox table is polled for
@@ -44,6 +48,11 @@ func IdentityApplication(ctx context.Context) {
 	if err != nil {
 		logger.Fatal("failed to init database", "error", err)
 	}
+	if cfg.Database.AutoMigrate {
+		if err := migrateDatabase(ctx, database); err != nil {
+			logger.Fatal("failed to migrate database", "error", err)
+		}
+	}
 
 	// Kafka producer
 	kafkaProducer, err := kafka.NewProducer(cfg.Kafka)
@@ -66,6 +75,9 @@ func IdentityApplication(ctx context.Context) {
 	if err != nil {
 		logger.Fatal("failed to init auth service", "error", err)
 	}
+	entryAdminService := services.NewAdminService(*cfg, entryUserRepository, entryOutboxRepository, txManager,
+		security.NewBcryptHasher(bcryptCost))
+	bootstrapAdmin(ctx, cfg.Admin, entryAdminService)
 
 	// Background workers run on their own context, cancelled only after the
 	// HTTP server has drained, so the outbox relay keeps running while
@@ -90,7 +102,11 @@ func IdentityApplication(ctx context.Context) {
 		// refresh tokens, so login and refresh can't work without it.
 		health.Check{Name: "redis", Critical: true, Func: redisCache.Ping},
 	))
-	httpServer := ginhttp.NewServer(cfg.API, entryAuthService, tokenIssuer, h)
+	throttle := handler.NewThrottle(redisCache, cfg.RateLimit)
+	httpServer, err := ginhttp.NewServer(cfg.API, entryAuthService, entryAdminService, tokenIssuer, throttle, h)
+	if err != nil {
+		logger.Fatal("failed to init HTTP server", "error", err)
+	}
 
 	logger.Info("Identity Application Started")
 
@@ -130,4 +146,35 @@ func IdentityApplication(ctx context.Context) {
 	}
 
 	logger.Info("Identity Application stopped")
+}
+
+// bootstrapAdmin creates the first ADMIN from ADMIN_EMAIL/ADMIN_PASSWORD
+// when both are set and no admin exists yet; otherwise it does nothing.
+// A failure is logged, not fatal: the service is still useful without an
+// admin, and the env can be fixed on the next start.
+func bootstrapAdmin(ctx context.Context, cfg config.Admin, admins ports.AdminService) {
+	if cfg.Email == "" || cfg.Password == "" {
+		return
+	}
+	created, err := admins.BootstrapAdmin(ctx, cfg.Email, cfg.Password)
+	switch {
+	case err != nil:
+		logger.Error("failed to bootstrap admin", "error", err)
+	case created:
+		logger.Info("bootstrapped the first admin from ADMIN_EMAIL")
+	}
+}
+
+// migrateDatabase applies pending schema migrations before anything uses
+// the database.
+func migrateDatabase(ctx context.Context, database *gorm.DB) error {
+	sqlDB, err := database.DB()
+	if err != nil {
+		return err
+	}
+	results, err := migrations.Up(ctx, sqlDB)
+	for _, r := range results {
+		logger.Info("applied migration", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
+	}
+	return err
 }
