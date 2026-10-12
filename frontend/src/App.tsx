@@ -57,7 +57,7 @@ function Workspace({ user }: { user: User }) {
         />
       </header>
 
-      <main>
+      <main className="app-main">
         {!staff && (
           <p className="message info">
             Booking and tracking your own vehicles is coming soon. The customer and vehicle tools
@@ -96,8 +96,8 @@ function App() {
           <div className="panel">
             <h2>Can’t reach the identity service</h2>
             <p className="muted">
-              Your session couldn’t be restored ({state.message}). Check that identity-service
-              is running, then try again.
+              Your session couldn’t be restored ({state.message}). Check that identity-service is
+              running, then try again.
             </p>
             <div className="actions">
               <button type="button" className="secondary" onClick={retry}>

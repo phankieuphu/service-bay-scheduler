@@ -112,7 +112,7 @@ export function CustomerDetail({ customer, onUpdated, onDeleted, onOpenVehicle }
   }
 
   return (
-    <section className="card stack" aria-labelledby="customer-detail-heading">
+    <section className="panel stack" aria-labelledby="customer-detail-heading">
       <div className="detail-header">
         <h2 id="customer-detail-heading">
           {customer.name} <span className="muted">#{customer.id}</span>

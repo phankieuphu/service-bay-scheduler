@@ -53,7 +53,7 @@ export function CreateCustomer({ onCreated, onCancel }: Props) {
   }
 
   return (
-    <section className="card" aria-labelledby="create-customer-heading">
+    <section className="panel" aria-labelledby="create-customer-heading">
       <h2 id="create-customer-heading">New customer</h2>
       <form className="form-grid" onSubmit={handleSubmit}>
         <label htmlFor="create-name">Name</label>
