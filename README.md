@@ -18,7 +18,8 @@ Last updated: 2026-09-29.
 | **frontend** (`:5173`) | Implemented | React 19 + Vite app: sign in / sign up, customer list and detail, vehicle search, register, detail, ownership and records. |
 | Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Flink, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
 | Load tests | Implemented | k6 and curl scenarios (smoke, baseline, load, stress, spike, soak) in [loadtest/](loadtest/). |
-| dealership, scheduler, billing, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
+| **billing-service** (`:8084`) | Scaffolded | Java 25 / Spring Boot 4 service with health, metrics and Flyway wired up. Deposits, bills and Stripe payments are being built ([#35](https://github.com/phankieuphu/service-bay-scheduler/issues/35)). |
+| dealership, scheduler, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
 
 Known gaps:
 
@@ -38,7 +39,7 @@ Known gaps:
 * [Data Warehouse Design](docs/data-warehouse-design.md): Kimball bus matrix, star schemas, CDC + dbt load plan, sizing per tier
 * [Responsibility Planning](docs/responsibility-planning.md)
 * [AI Agents](docs/ai-agents.md): PR description review and issue/PR labeler workflows: what they do, setup, and troubleshooting
-* Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
+* Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md), [billing-service](billing-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
 * [Deploying (Railway + Vercel)](docs/railway.md)
 * [Load tests](loadtest/README.md)
@@ -52,6 +53,7 @@ Known gaps:
 ├── identity-service/    Go module: auth, users, JWT
 ├── customer-service/    Go module: customer profiles
 ├── vehicle-service/     Go module: vehicles, ownership, warranty
+├── billing-service/     Java/Spring Boot (Gradle): deposits, bills, Stripe payments
 ├── frontend/            React + TypeScript + Vite web app
 ├── postgres/            init SQL (one database per service) and seed data
 ├── k8s/                 Kustomize base, tier overlays, metrics-server add-on
@@ -130,6 +132,7 @@ This runs all three services and every piece of infrastructure. You only need Do
 | http://localhost:8083/api/v1 | identity-service |
 | http://localhost:8080/api/v1 | customer-service |
 | http://localhost:8081/api/v1 | vehicle-service |
+| http://localhost:8084 | billing-service (`/actuator/health`, `/actuator/prometheus`) |
 | http://localhost:3000 | Grafana (`admin` / `admin`) |
 | http://localhost:9090 | Prometheus |
 | http://localhost:8082 | Flink web UI |
@@ -225,7 +228,7 @@ go test ./internal/domain/services/ -run TestVehicleService_TransferVehicle   # 
 
 Test files must end in `_test.go` (underscore). A file ending in `-test.go` compiles as normal source, and `go test` never runs its tests.
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every PR and push to `master`: `gofmt -l`, `go build`, `go vet` and `go test -race` per service, `npm run build` and `npm run lint` for the frontend, a `docker build` of each service, and `postgres/init`, every service's migrations (twice, to check they're idempotent) and the seeds on an empty database. The Go jobs also run the migrations tests against a Postgres service container. Run `gofmt -w .` before pushing, or the `gofmt` step fails.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every PR and push to `master`: `gofmt -l`, `go build`, `go vet` and `go test -race` per service, `./gradlew build` for billing-service (unit and Testcontainers tests), `npm run build` and `npm run lint` for the frontend, a `docker build` of each service, and `postgres/init`, every service's migrations (twice, to check they're idempotent) and the seeds on an empty database. The Go jobs also run the migrations tests against a Postgres service container. Run `gofmt -w .` before pushing, or the `gofmt` step fails.
 
 Against a running stack:
 
@@ -254,12 +257,13 @@ kubectl config use-context docker-desktop
 docker build -t customer-service:local ./customer-service
 docker build -t vehicle-service:local ./vehicle-service
 docker build -t identity-service:local ./identity-service
+docker build -t billing-service:local ./billing-service
 docker build -t service-bay-postgres:local ./postgres
 ```
 
 - **Docker Desktop**: images are shared with the cluster automatically, as long as Settings → General → "Use containerd for pulling and storing images" is on. Nothing else to do.
 - **minikube**: run `eval $(minikube docker-env)` before building, or `minikube image load <image>` afterwards.
-- **kind**: `kind load docker-image customer-service:local vehicle-service:local identity-service:local service-bay-postgres:local`
+- **kind**: `kind load docker-image customer-service:local vehicle-service:local identity-service:local billing-service:local service-bay-postgres:local`
 
 3. Apply all manifests via Kustomize:
 
@@ -282,6 +286,7 @@ kubectl get pods -n service-bay -w
 | customer-service | 8080         | 30080    |
 | vehicle-service  | 8081         | 30081    |
 | identity-service | 8083         | 30083    |
+| billing-service  | 8084         | 30084    |
 | prometheus       | 9090         | 30090    |
 | grafana          | 3000         | 30030    |
 | flink (web UI)   | 8081         | 30082    |

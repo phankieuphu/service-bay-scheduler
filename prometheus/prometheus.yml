@@ -37,6 +37,12 @@ scrape_configs:
       - targets: ["identity-service:8083"]
         labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: identity-service }
 
+  - job_name: billing-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["billing-service:8084"]
+        labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: billing-service }
+
   - job_name: flink
     static_configs:
       - targets: ["flink-jobmanager:9249", "flink-taskmanager:9249"]
