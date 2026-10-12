@@ -12,6 +12,13 @@ fi
 
 CUSTOMER_URL="${CUSTOMER_URL:-http://localhost:8080}"
 VEHICLE_URL="${VEHICLE_URL:-http://localhost:8081}"
+IDENTITY_URL="${IDENTITY_URL:-http://localhost:8083}"
+
+# Staff account the runners log in as: customer- and vehicle-service reject
+# requests without an identity-service access token, and customer routes
+# need a staff role. The defaults are docker-compose's bootstrap admin.
+LOADTEST_EMAIL="${LOADTEST_EMAIL:-admin@servicebay.local}"
+LOADTEST_PASSWORD="${LOADTEST_PASSWORD:-admin-local-dev-pass}"
 
 # Fallbacks when seed/seed.sh hasn't run: ranges of postgres/seed/*.sql, and
 # transfers disabled (they need a pool of vehicles with known ownership).
@@ -68,6 +75,20 @@ transfers_enabled() {
 }
 
 die() { echo "ERROR: $*" >&2; exit 1; }
+
+# ensure_access_token — sets and exports ACCESS_TOKEN by logging in to
+# identity-service as LOADTEST_EMAIL, unless ACCESS_TOKEN is already set.
+# Access tokens expire after identity-service's JWT_ACCESS_TTL_SEC (15 min by
+# default): for longer runs, raise it on identity-service in the test
+# environment, or requests start failing with 401 mid-run.
+ensure_access_token() {
+  [ -n "${ACCESS_TOKEN:-}" ] && return 0
+  local body
+  body=$(curl -s -m 10 -X POST -H 'Content-Type: application/json'     -d "{\"email\":\"$LOADTEST_EMAIL\",\"password\":\"$LOADTEST_PASSWORD\"}"     "$IDENTITY_URL/api/v1/auth/login")
+  ACCESS_TOKEN=$(printf '%s' "$body" | sed -n 's/.*"access_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  [ -n "$ACCESS_TOKEN" ] || die "login as $LOADTEST_EMAIL at $IDENTITY_URL failed (set LOADTEST_EMAIL/LOADTEST_PASSWORD to a staff account, or ACCESS_TOKEN): $body"
+  export ACCESS_TOKEN
+}
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 
 # now_ms — wall clock in milliseconds (bash 3.2 has no EPOCHREALTIME and

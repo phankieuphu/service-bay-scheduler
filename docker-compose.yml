@@ -26,6 +26,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+      # Must match identity-service's: access tokens are verified with it.
+      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
     ports:
       - "8080:8080"
     networks:
@@ -57,6 +59,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+      # Must match identity-service's: access tokens are verified with it.
+      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
     ports:
       - "8081:8081"
     networks:

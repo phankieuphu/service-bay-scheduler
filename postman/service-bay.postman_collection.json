@@ -376,7 +376,7 @@
     },
     {
       "name": "Customer Service",
-      "description": "customer-service (:8080).",
+      "description": "customer-service (:8080). Needs a staff access token (log in as the bootstrap admin); DELETE needs MANAGER or ADMIN.",
       "item": [
         {
           "name": "Create customer",
@@ -410,7 +410,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -455,7 +462,14 @@
             },
             "description": "Cursor-paginated.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -478,7 +492,14 @@
             },
             "description": "Stores updated_at for optimistic-lock on Update.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -526,7 +547,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -549,7 +577,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -622,7 +657,7 @@
     },
     {
       "name": "Vehicle Service",
-      "description": "vehicle-service (:8081).",
+      "description": "vehicle-service (:8081). Needs an access token; writes need a staff role.",
       "item": [
         {
           "name": "Register vehicle",
@@ -656,7 +691,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -730,7 +772,14 @@
             },
             "description": "Cursor-paginated with optional filters.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -753,7 +802,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -801,7 +857,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -839,7 +902,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -875,7 +945,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -899,7 +976,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -931,7 +1015,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -962,7 +1053,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -986,7 +1084,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },

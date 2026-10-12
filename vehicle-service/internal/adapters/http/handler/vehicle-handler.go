@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"vehicle-service/internal/adapters/http/dto"
+	"vehicle-service/internal/adapters/http/middleware"
 	"vehicle-service/internal/constants"
 	"vehicle-service/internal/domain/entity"
 	"vehicle-service/internal/domain/ports"
@@ -24,17 +25,22 @@ func NewVehicleHandler(service ports.VehicleService) *VehicleHandler {
 	return &VehicleHandler{service: service}
 }
 
+// RegisterRoutes expects r to already require authentication. Reads are
+// open to any signed-in user; registering, changing and transferring
+// vehicles is staff-only.
 func (h *VehicleHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/customers/:id/vehicles", h.GetCustomerVehicles)
-	r.POST("/transfer", h.TransferVehicle)
-	r.POST("/vehicle", h.RegisterVehicle)
 	r.GET("/vehicle", h.ListVehicles)
 	r.GET("/vehicle/:id", h.GetVehicle)
-	r.PATCH("/vehicle/:id", h.UpdateVehicle)
-	r.POST("/vehicle/:id/owner", h.AssignInitialOwner)
 	r.GET("/vehicle/:id/warranty", h.GetWarranty)
 	r.GET("/vehicle/:id/history", h.GetServiceHistory)
 	r.GET("/vehicle/:id/materials", h.GetVehicleMaterials)
+
+	staff := r.Group("", middleware.RequireRole(entity.StaffRoles...))
+	staff.POST("/transfer", h.TransferVehicle)
+	staff.POST("/vehicle", h.RegisterVehicle)
+	staff.PATCH("/vehicle/:id", h.UpdateVehicle)
+	staff.POST("/vehicle/:id/owner", h.AssignInitialOwner)
 }
 
 func (h *VehicleHandler) RegisterVehicle(c *gin.Context) {

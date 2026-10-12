@@ -2,6 +2,7 @@ package handler
 
 import (
 	"customer-service/internal/adapters/http/dto"
+	"customer-service/internal/adapters/http/middleware"
 	"customer-service/internal/domain/entity"
 	"customer-service/internal/domain/ports"
 	"errors"
@@ -19,12 +20,17 @@ func NewCustomerHandler(service ports.CustomerService) *CustomerHandler {
 	return &CustomerHandler{service: service}
 }
 
+// RegisterRoutes expects r to already require authentication. Customer
+// records are staff-managed: they aren't linked to identity users yet, so a
+// CUSTOMER can't be limited to their own record and gets 403 here.
+// Deleting is for managers and admins only.
 func (h *CustomerHandler) RegisterRoutes(r *gin.RouterGroup) {
-	r.POST("/customer", h.CreateCustomer)
-	r.GET("/customer", h.ListCustomers)
-	r.GET("/customer/:id", h.GetCustomer)
-	r.PUT("/customer/:id", h.UpdateCustomerProfile)
-	r.DELETE("/customer/:id", h.DeleteProfile)
+	staff := r.Group("", middleware.RequireRole(entity.StaffRoles...))
+	staff.POST("/customer", h.CreateCustomer)
+	staff.GET("/customer", h.ListCustomers)
+	staff.GET("/customer/:id", h.GetCustomer)
+	staff.PUT("/customer/:id", h.UpdateCustomerProfile)
+	staff.DELETE("/customer/:id", middleware.RequireRole(entity.RoleManager, entity.RoleAdmin), h.DeleteProfile)
 }
 
 func (h *CustomerHandler) CreateCustomer(c *gin.Context) {
