@@ -26,6 +26,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8080:8080"
     networks:
@@ -57,6 +63,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8081:8081"
     networks:
@@ -89,6 +101,12 @@ services:
       # Local-dev only. Services that validate access tokens themselves
       # must share this value.
       JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8083:8083"
     networks:
@@ -134,7 +152,7 @@ services:
       - backend
 
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: postgres
     restart: always
     environment:
@@ -197,7 +215,7 @@ services:
       - backend
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.10-alpine
     container_name: redis
     ports:
       - "6379:6379"
@@ -240,7 +258,7 @@ services:
 
   # Metrics exporters for the stateful infra (scraped by prometheus/prometheus.yml).
   postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     container_name: postgres-exporter
     depends_on:
       postgres:
@@ -253,7 +271,7 @@ services:
       - backend
 
   kafka-exporter:
-    image: danielqsj/kafka-exporter:v1.8.0
+    image: danielqsj/kafka-exporter:v1.10.0
     container_name: kafka-exporter
     # exits if the broker isn't up yet
     restart: on-failure
@@ -264,7 +282,7 @@ services:
       - backend
 
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.15.0
     container_name: prometheus
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -295,7 +313,7 @@ services:
       - backend
 
   loki:
-    image: grafana/loki:3.5.5
+    image: grafana/loki:3.7.8
     container_name: loki
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
@@ -307,7 +325,7 @@ services:
       - backend
 
   alloy:
-    image: grafana/alloy:v1.10.2
+    image: grafana/alloy:v1.20.1
     container_name: alloy
     depends_on:
       - loki

@@ -21,8 +21,13 @@ type Server struct {
 	engine     *gin.Engine
 }
 
-func NewServer(cfg config.API, authService ports.AuthService, tokens ports.TokenIssuer, h *health.Handler) *Server {
+func NewServer(cfg config.API, authService ports.AuthService, tokens ports.TokenIssuer, throttle *handler.Throttle, h *health.Handler) (*Server, error) {
 	engine := gin.New()
+	// c.ClientIP() feeds the per-IP rate limits, so only listed proxies'
+	// X-Forwarded-For is believed (gin trusts every proxy by default).
+	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		return nil, err
+	}
 	// Probes are registered before engine.Use, so they skip the middleware:
 	// kubelet hits them every few seconds, which would flood the access log
 	// and the request metrics.
@@ -32,7 +37,7 @@ func NewServer(cfg config.API, authService ports.AuthService, tokens ports.Token
 	engine.Use(metrics.PrometheusMiddleWare())
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	v1 := engine.Group("/api/v1")
-	handler.NewAuthHandler(authService, tokens).RegisterRoutes(v1)
+	handler.NewAuthHandler(authService, tokens, throttle).RegisterRoutes(v1)
 
 	return &Server{
 		engine: engine,
@@ -42,7 +47,7 @@ func NewServer(cfg config.API, authService ports.AuthService, tokens ports.Token
 			ReadTimeout:  cfg.ReadTimeout,
 			WriteTimeout: cfg.WriteTimeout,
 		},
-	}
+	}, nil
 }
 
 // Start blocks serving requests until Shutdown is called (returning nil)

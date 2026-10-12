@@ -6,6 +6,7 @@ import (
 	"identity-service/internal/adapters/cache"
 	database_provider "identity-service/internal/adapters/database/provider"
 	ginhttp "identity-service/internal/adapters/http"
+	"identity-service/internal/adapters/http/handler"
 	"identity-service/internal/adapters/kafka"
 	"identity-service/internal/adapters/repository"
 	"identity-service/internal/adapters/security"
@@ -97,7 +98,11 @@ func IdentityApplication(ctx context.Context) {
 		// refresh tokens, so login and refresh can't work without it.
 		health.Check{Name: "redis", Critical: true, Func: redisCache.Ping},
 	))
-	httpServer := ginhttp.NewServer(cfg.API, entryAuthService, tokenIssuer, h)
+	throttle := handler.NewThrottle(redisCache, cfg.RateLimit)
+	httpServer, err := ginhttp.NewServer(cfg.API, entryAuthService, tokenIssuer, throttle, h)
+	if err != nil {
+		logger.Fatal("failed to init HTTP server", "error", err)
+	}
 
 	logger.Info("Identity Application Started")
 

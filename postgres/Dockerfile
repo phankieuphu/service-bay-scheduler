@@ -1,4 +1,4 @@
-FROM postgres:16
+FROM postgres:18
 
 # Runs once, on an empty data volume: creates the databases, plus schemas for
 # services that don't have code (or migrations) yet. Built services apply

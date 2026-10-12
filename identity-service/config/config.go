@@ -4,6 +4,7 @@ import (
 	"identity-service/internal/constants"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Config struct {
 	Redis
 	Logger
 	JWT
+	RateLimit
 }
 
 type Database struct {
@@ -36,6 +38,11 @@ type API struct {
 	Port         string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	// TrustedProxies are the proxy IPs/CIDRs whose X-Forwarded-For is
+	// believed when working out the client IP for rate limiting. Empty
+	// means none: the TCP peer address is the client, so a client can't
+	// dodge the per-IP limits by sending its own X-Forwarded-For.
+	TrustedProxies []string
 }
 
 type Kafka struct {
@@ -73,6 +80,18 @@ type JWT struct {
 	RefreshTTL time.Duration
 }
 
+// RateLimit caps login and registration attempts (fixed windows, counted
+// in Redis). Login counts failures only, per IP and per email; a
+// successful login resets that email's count. Register counts every
+// attempt per IP.
+type RateLimit struct {
+	LoginPerEmail  int
+	LoginPerIP     int
+	LoginWindow    time.Duration
+	RegisterPerIP  int
+	RegisterWindow time.Duration
+}
+
 func LoadConfig() *Config {
 	return &Config{
 		Database: Database{
@@ -88,9 +107,10 @@ func LoadConfig() *Config {
 			AutoMigrate:     getEnvBool("DB_AUTO_MIGRATE", true),
 		},
 		API: API{
-			Port:         GetEnv("API_PORT", "8083"),
-			ReadTimeout:  time.Duration(getEnvInt("API_READ_TIMEOUT_SEC", 30)) * time.Second,
-			WriteTimeout: time.Duration(getEnvInt("API_WRITE_TIMEOUT_SEC", 30)) * time.Second,
+			Port:           GetEnv("API_PORT", "8083"),
+			ReadTimeout:    time.Duration(getEnvInt("API_READ_TIMEOUT_SEC", 30)) * time.Second,
+			WriteTimeout:   time.Duration(getEnvInt("API_WRITE_TIMEOUT_SEC", 30)) * time.Second,
+			TrustedProxies: getEnvList("API_TRUSTED_PROXIES"),
 		},
 		Kafka: Kafka{
 			Brokers:       []string{GetEnv("KAFKA_BROKERS", "localhost:9092")},
@@ -112,6 +132,13 @@ func LoadConfig() *Config {
 			Issuer:     GetEnv("JWT_ISSUER", "identity-service"),
 			AccessTTL:  time.Duration(getEnvInt("JWT_ACCESS_TTL_SEC", 900)) * time.Second,
 			RefreshTTL: time.Duration(getEnvInt("JWT_REFRESH_TTL_SEC", 604800)) * time.Second,
+		},
+		RateLimit: RateLimit{
+			LoginPerEmail:  getEnvInt("RATE_LIMIT_LOGIN_PER_EMAIL", 10),
+			LoginPerIP:     getEnvInt("RATE_LIMIT_LOGIN_PER_IP", 100),
+			LoginWindow:    time.Duration(getEnvInt("RATE_LIMIT_LOGIN_WINDOW_SEC", 900)) * time.Second,
+			RegisterPerIP:  getEnvInt("RATE_LIMIT_REGISTER_PER_IP", 20),
+			RegisterWindow: time.Duration(getEnvInt("RATE_LIMIT_REGISTER_WINDOW_SEC", 3600)) * time.Second,
 		},
 	}
 }
@@ -146,4 +173,15 @@ func getEnvBool(key string, defaultValue bool) bool {
 		return defaultValue
 	}
 	return b
+}
+
+// getEnvList splits a comma-separated variable, dropping empty entries.
+func getEnvList(key string) []string {
+	var out []string
+	for _, v := range strings.Split(os.Getenv(key), ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

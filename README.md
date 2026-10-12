@@ -38,8 +38,10 @@ Known gaps:
 * [Technical Requirement](docs/technical-requirement.md): scale and HA targets, and today's stack (§1a)
 * [Data Warehouse Design](docs/data-warehouse-design.md): Kimball bus matrix, star schemas, CDC + dbt load plan, sizing per tier
 * [Responsibility Planning](docs/responsibility-planning.md)
+* [AI Agents](docs/ai-agents.md): PR description review and issue/PR labeler workflows: what they do, setup, and troubleshooting
 * Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md), [billing-service](billing-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
+* [Deploying (Railway + Vercel)](docs/railway.md)
 * [Load tests](loadtest/README.md)
 
 ---
@@ -209,7 +211,7 @@ customer-service and vehicle-service publish to the fixed topic names in `intern
 
 Shared: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_SSLMODE`, `DB_MAX_OPEN_CONNS`, `KAFKA_BROKERS` (`localhost:9092` from the host), `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `LOG_LEVEL`, `LOG_FORMAT`.
 
-Every service exposes `GET /healthz` (liveness), `GET /readyz` (dependencies) and `GET /metrics` (Prometheus).
+Every service exposes `GET /healthz` (liveness), `GET /readyz` (dependencies) and `GET /metrics` (Prometheus). In k8s, `/healthz` backs the startup and liveness probes and `/readyz` the readiness probe. In docker-compose, `/readyz` is each service's `healthcheck`, so `docker compose ps` shows `healthy` once its dependencies are up.
 
 ---
 

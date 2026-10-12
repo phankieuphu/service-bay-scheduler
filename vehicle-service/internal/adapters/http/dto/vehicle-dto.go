@@ -19,12 +19,12 @@ type RegisterVehicleDTO struct {
 }
 
 // UpdateVehicleDTO is the body of PATCH /vehicle/:id. Omitted fields are
-// left unchanged. UpdatedAt must be the updated_at the client last read
-// (from GET /vehicle/:id); the update is rejected with 409 if the vehicle
-// has changed since.
+// left unchanged; "warranty_end_date": null removes the warranty. UpdatedAt
+// must be the updated_at the client last read (from GET /vehicle/:id); the
+// update is rejected with 409 if the vehicle has changed since.
 type UpdateVehicleDTO struct {
 	Status          *constants.VehicleStatus `json:"status"`
-	WarrantyEndDate *time.Time               `json:"warranty_end_date"`
+	WarrantyEndDate Optional[time.Time]      `json:"warranty_end_date"`
 	UpdatedAt       time.Time                `json:"updated_at" binding:"required"`
 }
 

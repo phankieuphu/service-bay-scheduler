@@ -44,10 +44,10 @@ export interface RegisterVehiclePayload {
   status?: VehicleStatus
 }
 
-// Omitted fields are left unchanged; the API has no way to clear a warranty.
+// Omitted fields are left unchanged; warranty_end_date: null clears the warranty.
 export interface UpdateVehiclePayload {
   status?: VehicleStatus
-  warranty_end_date?: string
+  warranty_end_date?: string | null
   updated_at: string
 }
 

@@ -14,7 +14,22 @@ import (
 // refreshTokenKeyPrefix namespaces refresh tokens in Redis.
 const refreshTokenKeyPrefix = "refresh:"
 
-// RedisCache is the Redis implementation of [ports.RefreshTokenStore].
+// attemptKeyPrefix namespaces rate-limit counters in Redis.
+const attemptKeyPrefix = "attempts:"
+
+// addAttemptScript increments a counter and, on its first increment, sets
+// the window expiry: in one round trip, and atomically, so a crash between
+// the two can't leave a counter that never expires.
+var addAttemptScript = redis.NewScript(`
+local n = redis.call('INCR', KEYS[1])
+if n == 1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return n
+`)
+
+// RedisCache is the Redis implementation of [ports.RefreshTokenStore] and
+// [ports.AttemptCounter].
 type RedisCache struct {
 	client *redis.Client
 }
@@ -52,6 +67,35 @@ func (r *RedisCache) Consume(ctx context.Context, tokenHash string) (string, err
 // Delete implements [ports.RefreshTokenStore].
 func (r *RedisCache) Delete(ctx context.Context, tokenHash string) error {
 	return r.client.Del(ctx, refreshTokenKeyPrefix+tokenHash).Err()
+}
+
+// Attempts implements [ports.AttemptCounter].
+func (r *RedisCache) Attempts(ctx context.Context, key string) (int, time.Duration, error) {
+	pipe := r.client.Pipeline()
+	get := pipe.Get(ctx, attemptKeyPrefix+key)
+	ttl := pipe.PTTL(ctx, attemptKeyPrefix+key)
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return 0, 0, err
+	}
+	count, err := get.Int()
+	if errors.Is(err, redis.Nil) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	// PTTL is negative for a missing key or one without an expiry.
+	return count, max(ttl.Val(), 0), nil
+}
+
+// AddAttempt implements [ports.AttemptCounter].
+func (r *RedisCache) AddAttempt(ctx context.Context, key string, window time.Duration) error {
+	return addAttemptScript.Run(ctx, r.client, []string{attemptKeyPrefix + key}, window.Milliseconds()).Err()
+}
+
+// ResetAttempts implements [ports.AttemptCounter].
+func (r *RedisCache) ResetAttempts(ctx context.Context, key string) error {
+	return r.client.Del(ctx, attemptKeyPrefix+key).Err()
 }
 
 func (r *RedisCache) Ping(ctx context.Context) error {

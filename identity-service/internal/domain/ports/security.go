@@ -29,3 +29,14 @@ type RefreshTokenStore interface {
 	Consume(ctx context.Context, tokenHash string) (userID string, err error)
 	Delete(ctx context.Context, tokenHash string) error
 }
+
+// AttemptCounter counts attempts per key in fixed windows, for rate
+// limiting. A window starts at a key's first attempt and lasts the window
+// passed to AddAttempt; the count resets when it ends.
+type AttemptCounter interface {
+	// Attempts returns key's count in its current window and how long
+	// until that window ends (0, 0 if it has none).
+	Attempts(ctx context.Context, key string) (count int, resetIn time.Duration, err error)
+	AddAttempt(ctx context.Context, key string, window time.Duration) error
+	ResetAttempts(ctx context.Context, key string) error
+}
