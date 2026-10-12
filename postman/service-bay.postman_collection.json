@@ -79,7 +79,7 @@
                 "login"
               ]
             },
-            "description": "Stores accessToken / refreshToken in collection variables.",
+            "description": "Stores accessToken in a collection variable. The refresh token comes back as an HttpOnly refresh_token cookie, kept in Postman's cookie jar (needs AUTH_COOKIE_SECURE=false over plain HTTP, as docker-compose sets).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
@@ -99,8 +99,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }",
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.refresh_token !== undefined) pm.collectionVariables.set('refreshToken', j.refresh_token); }"
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }"
                 ]
               }
             }
@@ -112,8 +111,8 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "X-Requested-With",
+                "value": "postman"
               }
             ],
             "url": {
@@ -128,16 +127,7 @@
                 "refresh"
               ]
             },
-            "description": "Rotates the token pair.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
+            "description": "Sends the refresh_token cookie; X-Requested-With is required. Rotates the cookie and returns a new access token.",
             "auth": {
               "type": "noauth"
             }
@@ -148,8 +138,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }",
-                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.refresh_token !== undefined) pm.collectionVariables.set('refreshToken', j.refresh_token); }"
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.access_token !== undefined) pm.collectionVariables.set('accessToken', j.access_token); }"
                 ]
               }
             }
@@ -190,8 +179,8 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "X-Requested-With",
+                "value": "postman"
               }
             ],
             "url": {
@@ -206,16 +195,7 @@
                 "logout"
               ]
             },
-            "description": "Revokes the refresh token. 204 on success.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
+            "description": "Revokes the refresh_token cookie's token and clears the cookie. X-Requested-With is required. 204 on success.",
             "auth": {
               "type": "noauth"
             }
@@ -396,7 +376,7 @@
     },
     {
       "name": "Customer Service",
-      "description": "customer-service (:8080).",
+      "description": "customer-service (:8080). Needs a staff access token (log in as the bootstrap admin); DELETE needs MANAGER or ADMIN.",
       "item": [
         {
           "name": "Create customer",
@@ -430,7 +410,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -475,7 +462,14 @@
             },
             "description": "Cursor-paginated.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -498,7 +492,14 @@
             },
             "description": "Stores updated_at for optimistic-lock on Update.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -546,7 +547,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -569,7 +577,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -642,7 +657,7 @@
     },
     {
       "name": "Vehicle Service",
-      "description": "vehicle-service (:8081).",
+      "description": "vehicle-service (:8081). Needs an access token; writes need a staff role.",
       "item": [
         {
           "name": "Register vehicle",
@@ -676,7 +691,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -750,7 +772,14 @@
             },
             "description": "Cursor-paginated with optional filters.",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -773,7 +802,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -821,7 +857,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -859,7 +902,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -895,7 +945,14 @@
               }
             },
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -919,7 +976,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -951,7 +1015,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -982,7 +1053,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -1006,7 +1084,14 @@
             },
             "description": "",
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -1349,11 +1434,6 @@
     },
     {
       "key": "accessToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "refreshToken",
       "value": "",
       "type": "string"
     },

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"vehicle-service/config"
 	"vehicle-service/internal/adapters/http/handler"
+	"vehicle-service/internal/adapters/http/middleware"
 	"vehicle-service/internal/adapters/metrics"
 	"vehicle-service/internal/domain/ports"
 	"vehicle-service/pkg/logger"
@@ -21,7 +22,7 @@ type Server struct {
 	engine     *gin.Engine
 }
 
-func NewServer(cfg config.API, accountService ports.VehicleService, h *health.Handler) *Server {
+func NewServer(cfg config.API, accountService ports.VehicleService, tokens middleware.TokenVerifier, h *health.Handler) *Server {
 	engine := gin.New()
 	// Probes are registered before engine.Use, so they skip the middleware:
 	// kubelet hits them every few seconds, which would flood the access log
@@ -31,7 +32,9 @@ func NewServer(cfg config.API, accountService ports.VehicleService, h *health.Ha
 	engine.Use(corsMiddleware())
 	engine.Use(metrics.PrometheusMiddleWare())
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	v1 := engine.Group("/api/v1")
+	// Every API route needs an identity-service access token; the probes
+	// and /metrics above stay open.
+	v1 := engine.Group("/api/v1", middleware.RequireAuth(tokens))
 	handler.NewVehicleHandler(accountService).RegisterRoutes(v1)
 
 	return &Server{

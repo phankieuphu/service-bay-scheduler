@@ -21,11 +21,12 @@ export interface User {
   created_at: string
 }
 
+// The refresh token isn't here: the API sets it as an HttpOnly cookie
+// scoped to /auth, so scripts (and any XSS) can never read it.
 export interface TokenResponse {
   access_token: string
   token_type: 'Bearer'
   expires_in: number
-  refresh_token: string
 }
 
 export interface RegisterPayload {
@@ -44,16 +45,28 @@ export function register(payload: RegisterPayload): Promise<User> {
   return request(`${BASE_URL}/auth/register`, jsonBody('POST', payload))
 }
 
+// credentials: 'include' lets the browser store and send the refresh-token
+// cookie on these cross-origin calls. The API requires X-Requested-With on
+// the routes that read the cookie (a CSRF guard a cross-site form can't
+// satisfy).
+const withCookie: RequestInit = {
+  credentials: 'include',
+  headers: { 'X-Requested-With': 'fetch' },
+}
+
 export function login(email: string, password: string): Promise<TokenResponse> {
-  return request(`${BASE_URL}/auth/login`, jsonBody('POST', { email, password }))
+  return request(`${BASE_URL}/auth/login`, {
+    ...jsonBody('POST', { email, password }),
+    credentials: 'include',
+  })
 }
 
-export function refresh(refreshToken: string): Promise<TokenResponse> {
-  return request(`${BASE_URL}/auth/refresh`, jsonBody('POST', { refresh_token: refreshToken }))
+export function refresh(): Promise<TokenResponse> {
+  return request(`${BASE_URL}/auth/refresh`, { ...withCookie, method: 'POST' })
 }
 
-export function logout(refreshToken: string): Promise<void> {
-  return request(`${BASE_URL}/auth/logout`, jsonBody('POST', { refresh_token: refreshToken }))
+export function logout(): Promise<void> {
+  return request(`${BASE_URL}/auth/logout`, { ...withCookie, method: 'POST' })
 }
 
 export function getMe(accessToken: string): Promise<User> {

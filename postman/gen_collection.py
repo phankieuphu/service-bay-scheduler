@@ -11,12 +11,12 @@ out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path
 def save(var, expr):
     return [f"if (pm.response.code < 300) {{ const j = pm.response.json(); if ({expr} !== undefined) pm.collectionVariables.set('{var}', {expr}); }}"]
 
-def req(name, method, base, path, body=None, query=None, desc="", tests=None, auth=False, pre=None):
+def req(name, method, base, path, body=None, query=None, desc="", tests=None, auth=False, pre=None, headers=None):
     segs = [s for s in path.strip("/").split("/")]
     url = {"raw": "{{%s}}/%s" % (base, "/".join(segs)) + ("?" + "&".join(f"{q['key']}={q['value']}" for q in query if not q.get("disabled")) if query and any(not x.get("disabled") for x in query) else ""),
            "host": ["{{%s}}" % base], "path": segs}
     if query: url["query"] = query
-    r = {"method": method, "header": [], "url": url, "description": desc}
+    r = {"method": method, "header": [{"key": k, "value": v} for k, v in (headers or {}).items()], "url": url, "description": desc}
     if body is not None:
         r["header"].append({"key": "Content-Type", "value": "application/json"})
         raw = json.dumps(body, indent=2)
@@ -52,15 +52,16 @@ identity = {"name": "Identity Service", "description": "identity-service (:8083)
         tests=save("userId", "j.id")),
     req("Login", "POST", "identityUrl", "/api/v1/auth/login",
         {"email": "{{userEmail}}", "password": "{{userPassword}}"},
-        desc="Stores accessToken / refreshToken in collection variables.",
-        tests=save("accessToken", "j.access_token") + save("refreshToken", "j.refresh_token")),
+        desc="Stores accessToken in a collection variable. The refresh token comes back as an HttpOnly refresh_token cookie, kept in Postman's cookie jar (needs AUTH_COOKIE_SECURE=false over plain HTTP, as docker-compose sets).",
+        tests=save("accessToken", "j.access_token")),
     req("Refresh token", "POST", "identityUrl", "/api/v1/auth/refresh",
-        {"refresh_token": "{{refreshToken}}"},
-        desc="Rotates the token pair.",
-        tests=save("accessToken", "j.access_token") + save("refreshToken", "j.refresh_token")),
+        desc="Sends the refresh_token cookie; X-Requested-With is required. Rotates the cookie and returns a new access token.",
+        headers={"X-Requested-With": "postman"},
+        tests=save("accessToken", "j.access_token")),
     req("Me", "GET", "identityUrl", "/api/v1/me", desc="Requires Authorization: Bearer <access token>.", auth=True),
     req("Logout", "POST", "identityUrl", "/api/v1/auth/logout",
-        {"refresh_token": "{{refreshToken}}"}, desc="Revokes the refresh token. 204 on success."),
+        desc="Revokes the refresh_token cookie's token and clears the cookie. X-Requested-With is required. 204 on success.",
+        headers={"X-Requested-With": "postman"}),
     {"name": "Admin", "description": "Needs an ADMIN access token: log in as the bootstrap admin (ADMIN_EMAIL / ADMIN_PASSWORD) first.", "item": [
         req("Create user", "POST", "identityUrl", "/api/v1/admin/users",
             {"email": "staff.{{$timestamp}}@example.com", "password": "{{userPassword}}", "role": "TECHNICIAN"},
@@ -73,7 +74,15 @@ identity = {"name": "Identity Service", "description": "identity-service (:8083)
     ops("identityUrl"),
 ]}
 
-customer = {"name": "Customer Service", "description": "customer-service (:8080).", "item": [
+def with_auth(group):
+    """Bearer-auth every request in group except the Ops folder (probes and
+    /metrics need no token)."""
+    for item in group["item"]:
+        if "request" in item:
+            item["request"]["auth"] = {"type": "bearer", "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]}
+    return group
+
+customer = {"name": "Customer Service", "description": "customer-service (:8080). Needs a staff access token (log in as the bootstrap admin); DELETE needs MANAGER or ADMIN.", "item": [
     req("Create customer", "POST", "customerUrl", "/api/v1/customer",
         {"name": "Jane Doe", "email": "jane.{{$timestamp}}@example.com", "phone": "+84901234567", "birth_day": "1990-05-20T00:00:00Z"},
         tests=save("customerId", "j.id")),
@@ -90,7 +99,7 @@ customer = {"name": "Customer Service", "description": "customer-service (:8080)
     ops("customerUrl"),
 ]}
 
-vehicle = {"name": "Vehicle Service", "description": "vehicle-service (:8081).", "item": [
+vehicle = {"name": "Vehicle Service", "description": "vehicle-service (:8081). Needs an access token; writes need a staff role.", "item": [
     req("Register vehicle", "POST", "vehicleUrl", "/api/v1/vehicle",
         {"vin": "{{randomVin}}", "license_plate": "51A-123.45", "vehicle_model_id": 1, "warranty_end_date": "2028-12-31T00:00:00Z", "status": "ACTIVE"},
         desc="status: ACTIVE (default) | SOLD | SCRAPPED. VIN/plate normalized server-side.",
@@ -142,11 +151,11 @@ def var(k, v): return {"key": k, "value": v, "type": "string"}
 coll = {
     "info": {"name": "Service Bay", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
              "description": "All HTTP APIs for Service Bay. Run Identity > Register/Login first; create/register requests store IDs (customerId, vehicleId, billId) into collection variables for later requests."},
-    "item": [identity, customer, vehicle, billing],
+    "item": [identity, with_auth(customer), with_auth(vehicle), billing],
     "variable": [var("identityUrl", "http://localhost:8083"), var("customerUrl", "http://localhost:8080"),
                  var("vehicleUrl", "http://localhost:8081"), var("billingUrl", "http://localhost:8084"),
                  var("userEmail", "dev@example.com"), var("userPassword", "Passw0rd!"),
-                 var("accessToken", ""), var("refreshToken", ""), var("userId", ""),
+                 var("accessToken", ""), var("userId", ""),
                  var("customerId", "1"), var("targetCustomerId", "2"), var("vehicleId", "1"), var("billId", "1"),
                  var("customerUpdatedAt", ""), var("randomVin", ""), var("vehicleUpdatedAt", "")],
 }

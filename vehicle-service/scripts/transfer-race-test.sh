@@ -4,11 +4,16 @@
 # correctly lets exactly one win and rejects the other two.
 #
 # Usage: ./transfer-race-test.sh
-# Env overrides: BASE_URL, VEHICLE_ID, FROM_CUSTOMER, TO_CUSTOMERS
+# Env overrides: BASE_URL, VEHICLE_ID, FROM_CUSTOMER, TO_CUSTOMERS, and
+# ACCESS_TOKEN (a staff access token; otherwise it logs in to IDENTITY_URL
+# as LOADTEST_EMAIL/LOADTEST_PASSWORD, docker-compose's bootstrap admin by
+# default).
 
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8081}"
+. "$(dirname "$0")/../../loadtest/lib/common.sh"
+ensure_access_token
 
 # Edit these for each test run.
 # FROM_CUSTOMER must be the vehicle's *current* owner (status='CURRENT' in
@@ -32,6 +37,7 @@ for to in "${TO_CUSTOMERS[@]}"; do
     body=$(curl -s -o "$OUT_DIR/$to.body" -w '%{http_code}' \
       -X POST "$BASE_URL/api/v1/transfer" \
       -H 'Content-Type: application/json' \
+      -H "Authorization: Bearer $ACCESS_TOKEN" \
       -d "{\"vehicle_id\":$VEHICLE_ID,\"from\":$FROM_CUSTOMER,\"to\":$to,\"date\":\"$DATE\"}")
     echo "$body" > "$OUT_DIR/$to.status"
   ) &

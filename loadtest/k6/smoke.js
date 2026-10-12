@@ -7,11 +7,11 @@
 
 import http from 'k6/http';
 import { check, group } from 'k6';
-import { CUSTOMER_URL, VEHICLE_URL, SEED, TRANSFERS_ENABLED } from './lib/config.js';
+import { CUSTOMER_URL, VEHICLE_URL, SEED, TRANSFERS_ENABLED, ACCESS_TOKEN } from './lib/config.js';
 
 const C = `${CUSTOMER_URL}/api/v1`;
 const V = `${VEHICLE_URL}/api/v1`;
-const H = { headers: { 'Content-Type': 'application/json' }, responseCallback: http.expectedStatuses({ min: 200, max: 499 }) };
+const H = { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ACCESS_TOKEN}` }, responseCallback: http.expectedStatuses({ min: 200, max: 499 }) };
 
 export const options = {
   vus: 1,
