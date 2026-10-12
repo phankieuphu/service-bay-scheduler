@@ -15,12 +15,13 @@ import (
 )
 
 type AuthHandler struct {
-	service ports.AuthService
-	tokens  ports.TokenIssuer
+	service  ports.AuthService
+	tokens   ports.TokenIssuer
+	throttle *Throttle // nil disables rate limiting
 }
 
-func NewAuthHandler(service ports.AuthService, tokens ports.TokenIssuer) *AuthHandler {
-	return &AuthHandler{service: service, tokens: tokens}
+func NewAuthHandler(service ports.AuthService, tokens ports.TokenIssuer, throttle *Throttle) *AuthHandler {
+	return &AuthHandler{service: service, tokens: tokens, throttle: throttle}
 }
 
 func (h *AuthHandler) RegisterRoutes(r *gin.RouterGroup) {
@@ -38,6 +39,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Every attempt counts, not just failures: what's being limited is
+	// mass account creation, which is a stream of successes.
+	if t := h.throttle; t != nil {
+		limits := t.registerLimits(c.ClientIP())
+		if wait, blocked := t.blocked(c.Request.Context(), limits); blocked {
+			tooManyRequests(c, wait)
+			return
+		}
+		t.add(c.Request.Context(), limits, t.cfg.RegisterWindow)
 	}
 
 	user, err := h.service.Register(c.Request.Context(), entity.Register{
@@ -60,7 +72,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Checked before the password, so a locked-out email costs no bcrypt
+	// work. The 429 is the same whether or not the email has an account.
+	var limits []limit
+	if t := h.throttle; t != nil {
+		limits = t.loginLimits(c.ClientIP(), req.Email)
+		if wait, blocked := t.blocked(c.Request.Context(), limits); blocked {
+			tooManyRequests(c, wait)
+			return
+		}
+	}
+
 	pair, err := h.service.Login(c.Request.Context(), req.Email, req.Password)
+	if t := h.throttle; t != nil {
+		switch {
+		case errors.Is(err, ports.ErrInvalidCredentials):
+			t.add(c.Request.Context(), limits, t.cfg.LoginWindow)
+		case err == nil:
+			// Only the email's count: resetting the IP's would let one valid
+			// account clear the way for guessing at others.
+			t.reset(c.Request.Context(), loginEmailKey(req.Email))
+		}
+	}
 	if err != nil {
 		writeError(c, err)
 		return
