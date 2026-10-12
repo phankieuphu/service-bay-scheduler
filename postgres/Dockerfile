@@ -1,5 +1,8 @@
-FROM postgres:16
+FROM postgres:18
 
+# Runs once, on an empty data volume: creates the databases, plus schemas for
+# services that don't have code (or migrations) yet. Built services apply
+# their own migrations on startup.
 COPY init/ /docker-entrypoint-initdb.d/
-COPY seed/init-customer.sql /docker-entrypoint-initdb.d/09-seed-customer.sql
-COPY seed/init-vehicle.sql /docker-entrypoint-initdb.d/10-seed-vehicle.sql
+# Dev data, loaded after the services have migrated: sh /seed/seed.sh
+COPY seed/ /seed/

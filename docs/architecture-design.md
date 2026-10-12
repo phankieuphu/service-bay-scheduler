@@ -192,7 +192,7 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 |---|---|---|---|
 | `vehicle.vehicle.created.v1` | `VehicleCreated` | `POST /vehicle` | `id`, `vin`, `license_plate` (omitted if none), `vehicle_model_id`, `warranty_end_date` (`null` if none), `status`, `created_at`, `updated_at` |
 | `vehicle.vehicle.updated.v1` | `VehicleUpdated` | `PATCH /vehicle/:id` changed something | same as `VehicleCreated`, the state after the change |
-| `vehicle.vehicle.warranty-changed.v1` | `WarrantyChanged` | `PATCH` changed the warranty — **billing-service's input** | `id`, `previous_warranty_end_date`, `warranty_end_date` |
+| `vehicle.vehicle.warranty-changed.v1` | `WarrantyChanged` | `PATCH` changed or cleared the warranty — **billing-service's input** | `id`, `previous_warranty_end_date`, `warranty_end_date` (`null` when cleared) |
 | `vehicle.vehicle-customer.assigned.v1` | `OwnerAssigned` | `POST /vehicle/:id/owner` | `id`, `customer_id`, `owned_from` |
 | `vehicle.vehicle-customer.transfer.v1` | `VehicleTransferred` | `POST /transfer` | `id`, `customer_id` (new owner), `previous_customer_id`, `owned_from` |
 

@@ -194,8 +194,11 @@ func (v *VehicleService) RegisterVehicle(ctx context.Context, vehicle entity.Veh
 // whole transaction, so the "previous" warranty in the WarrantyChanged event
 // is exactly what this update replaced.
 func (v *VehicleService) UpdateVehicle(ctx context.Context, vehicleID int64, update entity.VehicleUpdate) (entity.Vehicle, error) {
-	if update.Status == nil && update.WarrantyEndDate == nil {
+	if update.Status == nil && update.WarrantyEndDate == nil && !update.ClearWarranty {
 		return entity.Vehicle{}, fmt.Errorf("%w: nothing to update", ports.ErrInvalidInput)
+	}
+	if update.ClearWarranty && update.WarrantyEndDate != nil {
+		return entity.Vehicle{}, fmt.Errorf("%w: warranty_end_date can't be both set and cleared", ports.ErrInvalidInput)
 	}
 	if update.Status != nil && !update.Status.Valid() {
 		return entity.Vehicle{}, fmt.Errorf("%w: unknown status %q", ports.ErrInvalidInput, *update.Status)
@@ -224,6 +227,9 @@ func (v *VehicleService) UpdateVehicle(ctx context.Context, vehicleID int64, upd
 		if update.WarrantyEndDate != nil {
 			date := calendarDate(*update.WarrantyEndDate)
 			next.WarrantyEndDate = &date
+		}
+		if update.ClearWarranty {
+			next.WarrantyEndDate = nil
 		}
 		statusChanged := next.Status != current.Status
 		warrantyChanged := !sameDate(next.WarrantyEndDate, current.WarrantyEndDate)

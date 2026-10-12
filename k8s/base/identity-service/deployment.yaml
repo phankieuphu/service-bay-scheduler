@@ -39,6 +39,23 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8083
+          # /healthz only says the process is up; /readyz also checks
+          # Postgres (and Redis for identity-service). Liveness must not use
+          # /readyz, or a database outage would restart every pod.
+          startupProbe:
+            httpGet: { path: /healthz, port: 8083 }
+            periodSeconds: 2
+            failureThreshold: 30   # up to 60s to connect to Postgres/Kafka
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8083 }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8083 }
+            periodSeconds: 10
+            timeoutSeconds: 3      # the checks themselves time out at 2s
+            failureThreshold: 3
           envFrom:
             - configMapRef:
                 name: identity-service-config
@@ -66,6 +83,17 @@ spec:
             - name: ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef: { name: identity-admin, key: ADMIN_PASSWORD, optional: true }
+            - name: GOMEMLIMIT # ~85% of the memory limit, so the GC works harder before an OOM kill
+              value: "108MiB"
+          # Login and register are bcrypt-bound (cost 12, ~250ms of CPU each),
+          # so the CPU limit is higher than the other services' to absorb bursts.
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1"
+              memory: "128Mi"
 ---
 apiVersion: v1
 kind: Service

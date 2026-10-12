@@ -19,10 +19,13 @@ type Vehicle struct {
 }
 
 // VehicleUpdate is a partial update: nil fields are left unchanged.
-// UpdatedAt must be the updated_at the caller last read; the update is
-// rejected if the vehicle has changed since.
+// ClearWarranty removes the warranty (WarrantyEndDate must then be nil),
+// since a nil WarrantyEndDate alone means "leave it". UpdatedAt must be the
+// updated_at the caller last read; the update is rejected if the vehicle
+// has changed since.
 type VehicleUpdate struct {
 	Status          *constants.VehicleStatus
 	WarrantyEndDate *time.Time
+	ClearWarranty   bool
 	UpdatedAt       time.Time
 }

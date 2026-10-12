@@ -8,7 +8,7 @@ Non-functional requirements and technical constraints for Service Bay, derived f
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Language | Go | one binary per service (architecture-design §1); goroutines suit the I/O-bound, high-concurrency profile in §3 |
+| Language | Go, except billing-service (Java) | one binary per service (architecture-design §1); goroutines suit the I/O-bound, high-concurrency profile in §3. Billing is the exception; see §1b |
 | Relational store | PostgreSQL 16 | one schema/database per service (architecture-design §7); range types + exclusion constraints used for the booking overlap guarantee (architecture-design §4) |
 | Cache | Redis | availability-cache (short TTL, hint not source of truth) + identity-service session store (architecture-design §7) |
 | Messaging | Kafka | async event bus (architecture-design §3), already in `docker-compose.yml` |
@@ -25,7 +25,7 @@ The table above is the target. Current state:
 
 | Layer | Today |
 |---|---|
-| Language | Go 1.26, gin HTTP, GORM, IBM sarama for Kafka. Three services built (identity, customer, vehicle); see `architecture-design.md` §0. |
+| Language | Go 1.26, gin HTTP, GORM, IBM sarama for Kafka. Three services built (identity, customer, vehicle); see `architecture-design.md` §0. billing-service is scaffolded in Java 25 / Spring Boot 4 (§1b). |
 | PostgreSQL | Postgres 16, one instance and one database per service. No replicas. |
 | Cache | Redis 7.2, single node: identity-service refresh tokens, customer list-page cache. |
 | Messaging | Kafka, single broker, replication factor 1. |
@@ -39,6 +39,16 @@ None of the HA mechanisms in §4 (replicas, failover, RF 3 Kafka, multi-AZ) are 
 
 ---
 
+
+### 1b. Exception: billing-service is Java
+
+billing-service, the platform's payment service, is built in **Java 25 / Spring Boot 4** (Gradle), not Go. The plan in [#35](https://github.com/phankieuphu/service-bay-scheduler/issues/35) chose this. The reasons:
+
+- **Money handling.** Payments are the one place where a mistake costs real money. The Java stack gives declarative transactions (`@Transactional`), JPA optimistic and pessimistic locking, Flyway, and mature tooling for exact integer and `BigDecimal` arithmetic.
+- **Stripe.** `stripe-java` is Stripe's reference SDK. Its typed models, webhook signature verification and idempotency support cover every flow billing needs.
+- **Testing.** JUnit 5 plus Testcontainers (Postgres, Kafka) and stripe-mock test the payment paths against real infrastructure.
+
+Everything else stays the same as the Go services: the same hexagonal layout (`domain` / `adapters` / `application`), env var names where they overlap (`DB_*`, `KAFKA_BROKERS`, `API_PORT`), the transactional outbox, `/actuator/health/{liveness,readiness}` for the probes, and Prometheus metrics. The cost is a second toolchain in CI and in the images, and a JVM's larger memory footprint (requests 384Mi vs 128Mi for a Go service).
 ## 2. Scale Targets (given)
 
 | Dimension | Target |

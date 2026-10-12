@@ -18,7 +18,8 @@ Last updated: 2026-09-29.
 | **frontend** (`:5173`) | Implemented | React 19 + Vite app: sign in / sign up, customer list and detail, vehicle search, register, detail, ownership and records. |
 | Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Flink, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
 | Load tests | Implemented | k6 and curl scenarios (smoke, baseline, load, stress, spike, soak) in [loadtest/](loadtest/). |
-| dealership, scheduler, billing, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
+| **billing-service** (`:8084`) | Scaffolded | Java 25 / Spring Boot 4 service with health, metrics and Flyway wired up. Deposits, bills and Stripe payments are being built ([#35](https://github.com/phankieuphu/service-bay-scheduler/issues/35)). |
+| dealership, scheduler, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
 
 Known gaps:
 
@@ -37,9 +38,10 @@ Known gaps:
 * [Technical Requirement](docs/technical-requirement.md): scale and HA targets, and today's stack (§1a)
 * [Data Warehouse Design](docs/data-warehouse-design.md): Kimball bus matrix, star schemas, CDC + dbt load plan, sizing per tier
 * [Responsibility Planning](docs/responsibility-planning.md)
-* [AI Agents](docs/ai-agents.md): PR description review, issue/PR labeler, and AI code review (`/review`) workflows: what they do, setup, and troubleshooting
-* Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
+* [AI Agents](docs/ai-agents.md): PR description review and issue/PR labeler workflows: what they do, setup, and troubleshooting
+* Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md), [billing-service](billing-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
+* [Deploying (Railway + Vercel)](docs/railway.md)
 * [Load tests](loadtest/README.md)
 
 ---
@@ -51,6 +53,7 @@ Known gaps:
 ├── identity-service/    Go module: auth, users, JWT
 ├── customer-service/    Go module: customer profiles
 ├── vehicle-service/     Go module: vehicles, ownership, warranty
+├── billing-service/     Java/Spring Boot (Gradle): deposits, bills, Stripe payments
 ├── frontend/            React + TypeScript + Vite web app
 ├── postgres/            init SQL (one database per service) and seed data
 ├── k8s/                 Kustomize base, tier overlays, metrics-server add-on
@@ -93,7 +96,7 @@ This runs all three services and every piece of infrastructure. You only need Do
    docker compose up -d --build
    ```
 
-   On first start, Postgres runs [postgres/init/](postgres/init/): it creates one database per service (`identity_db`, `customer_db`, `vehicle_db`, …), their tables, and seed customers and vehicles. The services wait for Postgres to be healthy.
+   On first start, Postgres runs [postgres/init/](postgres/init/), which creates one database per service (`identity_db`, `customer_db`, `vehicle_db`, …). identity-, customer- and vehicle-service then create their own tables by applying their migrations on startup. The one-shot `db-seed` container waits for those tables and loads seed customers and vehicles. The services wait for Postgres to be healthy.
 
 3. Check that everything is up:
 
@@ -129,6 +132,7 @@ This runs all three services and every piece of infrastructure. You only need Do
 | http://localhost:8083/api/v1 | identity-service |
 | http://localhost:8080/api/v1 | customer-service |
 | http://localhost:8081/api/v1 | vehicle-service |
+| http://localhost:8084 | billing-service (`/actuator/health`, `/actuator/prometheus`) |
 | http://localhost:3000 | Grafana (`admin` / `admin`) |
 | http://localhost:9090 | Prometheus |
 | http://localhost:8082 | Flink web UI |
@@ -146,7 +150,16 @@ docker compose down                                # stop, keep data
 docker compose down -v                             # stop and delete all data
 ```
 
-Postgres only runs the init scripts when its data volume is empty. After changing a schema in `postgres/init/`, run `docker compose down -v` (this deletes all local data) and start again.
+**Schema changes.** identity-, customer- and vehicle-service own their schemas as numbered [goose](https://github.com/pressly/goose) migrations in `<service>/migrations/`, embedded in the binary. Each service applies pending ones on startup under a Postgres advisory lock, so replicas take turns. Existing volumes pick up changes without `down -v`:
+
+```bash
+cd vehicle-service
+go run ./cmd/migrate status        # what's applied (same DB_* env as the server)
+go run ./cmd/migrate up            # apply pending (the server does this itself unless DB_AUTO_MIGRATE=false)
+go run ./cmd/migrate down          # roll back the latest one
+```
+
+`00001_baseline.sql` is the schema the old init scripts created, written as `IF NOT EXISTS`, so a volume built by those scripts adopts it as-is. `postgres/init/` now only creates the databases, plus schemas (`04`–`08`) for services that aren't built yet, and those only run on an empty volume. Seeds are dev-only: `db-seed` in docker-compose (leave it out with `--scale db-seed=0`), or `sh postgres/seed/seed.sh`. Re-running them skips tables that already have rows.
 
 ---
 
@@ -209,7 +222,7 @@ Shared: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_SSLMODE`, `DB_MA
 
 Any other role gets `403`. The probes and `/metrics` need no token.
 
-Every service exposes `GET /healthz` (liveness), `GET /readyz` (dependencies) and `GET /metrics` (Prometheus).
+Every service exposes `GET /healthz` (liveness), `GET /readyz` (dependencies) and `GET /metrics` (Prometheus). In k8s, `/healthz` backs the startup and liveness probes and `/readyz` the readiness probe. In docker-compose, `/readyz` is each service's `healthcheck`, so `docker compose ps` shows `healthy` once its dependencies are up.
 
 ---
 
@@ -225,6 +238,8 @@ go test ./internal/domain/services/ -run TestVehicleService_TransferVehicle   # 
 ```
 
 Test files must end in `_test.go` (underscore). A file ending in `-test.go` compiles as normal source, and `go test` never runs its tests.
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every PR and push to `master`: `gofmt -l`, `go build`, `go vet` and `go test -race` per service, `./gradlew build` for billing-service (unit and Testcontainers tests), `npm run build` and `npm run lint` for the frontend, a `docker build` of each service, and `postgres/init`, every service's migrations (twice, to check they're idempotent) and the seeds on an empty database. The Go jobs also run the migrations tests against a Postgres service container. Run `gofmt -w .` before pushing, or the `gofmt` step fails.
 
 Against a running stack:
 
@@ -253,12 +268,13 @@ kubectl config use-context docker-desktop
 docker build -t customer-service:local ./customer-service
 docker build -t vehicle-service:local ./vehicle-service
 docker build -t identity-service:local ./identity-service
+docker build -t billing-service:local ./billing-service
 docker build -t service-bay-postgres:local ./postgres
 ```
 
 - **Docker Desktop**: images are shared with the cluster automatically, as long as Settings → General → "Use containerd for pulling and storing images" is on. Nothing else to do.
 - **minikube**: run `eval $(minikube docker-env)` before building, or `minikube image load <image>` afterwards.
-- **kind**: `kind load docker-image customer-service:local vehicle-service:local identity-service:local service-bay-postgres:local`
+- **kind**: `kind load docker-image customer-service:local vehicle-service:local identity-service:local billing-service:local service-bay-postgres:local`
 
 3. Apply all manifests via Kustomize:
 
@@ -281,6 +297,7 @@ kubectl get pods -n service-bay -w
 | customer-service | 8080         | 30080    |
 | vehicle-service  | 8081         | 30081    |
 | identity-service | 8083         | 30083    |
+| billing-service  | 8084         | 30084    |
 | prometheus       | 9090         | 30090    |
 | grafana          | 3000         | 30030    |
 | flink (web UI)   | 8081         | 30082    |
@@ -414,11 +431,11 @@ Kafka consumer ──────┘                  │
 1. Add the interface method in `internal/domain/ports/`.
 2. Implement it in `internal/domain/services/` and add a `_test.go` using the existing mocks.
 3. Add the repository method in `internal/adapters/repository/`, and a GORM model in `internal/adapters/database/models/` if there's a new table.
-4. Add the SQL to that service's file in `postgres/init/` (then `docker compose down -v` locally).
+4. Add the SQL as the next numbered file in that service's `migrations/` (`-- +goose Up` / `-- +goose Down`). Never edit a migration that has shipped. It's applied the next time the service starts.
 5. Add the handler and DTOs in `internal/adapters/http/`, and register the route in `server.go`.
 6. For a new Kafka event, write it to the outbox inside the same transaction, and document its contract in [architecture-design.md](docs/architecture-design.md).
 
-A new service copies an existing one (customer-service is the smallest) and gets its own database in `postgres/init/00-create-databases.sql`, a compose entry and a `k8s/base/` folder.
+A new service copies an existing one (customer-service is the smallest) and gets its own database in `postgres/init/00-create-databases.sql`, its own `migrations/` (move its `postgres/init/0N-*.sql` schema there as the baseline), a compose entry and a `k8s/base/` folder.
 
 ---
 

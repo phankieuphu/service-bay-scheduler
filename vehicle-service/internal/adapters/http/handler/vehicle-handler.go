@@ -183,7 +183,8 @@ func (h *VehicleHandler) UpdateVehicle(c *gin.Context) {
 
 	vehicle, err := h.service.UpdateVehicle(c.Request.Context(), vehicleID, entity.VehicleUpdate{
 		Status:          req.Status,
-		WarrantyEndDate: req.WarrantyEndDate,
+		WarrantyEndDate: req.WarrantyEndDate.Value,
+		ClearWarranty:   req.WarrantyEndDate.Set && req.WarrantyEndDate.Value == nil,
 		UpdatedAt:       req.UpdatedAt,
 	})
 	if err != nil {

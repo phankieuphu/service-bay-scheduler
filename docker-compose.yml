@@ -28,6 +28,12 @@ services:
       REDIS_PASSWORD: ""
       # Must match identity-service's: access tokens are verified with it.
       JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8080:8080"
     networks:
@@ -61,6 +67,12 @@ services:
       REDIS_PASSWORD: ""
       # Must match identity-service's: access tokens are verified with it.
       JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8081:8081"
     networks:
@@ -100,13 +112,58 @@ services:
       # Local-dev only: creates this ADMIN on first start if none exists.
       ADMIN_EMAIL: admin@servicebay.local
       ADMIN_PASSWORD: admin-local-dev-pass
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     ports:
       - "8083:8083"
     networks:
       - backend
 
+  billing-service:
+    build:
+      context: ./billing-service
+      dockerfile: Dockerfile
+    container_name: billing-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: billing_db
+      DB_SSLMODE: disable
+      API_PORT: 8084
+      KAFKA_BROKERS: kafka:29092
+    healthcheck:
+      # The JRE image has no curl, and its /bin/sh (dash) has no /dev/tcp,
+      # so ask readiness over bash's /dev/tcp.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/localhost/8084
+          && printf 'GET /actuator/health/readiness HTTP/1.0\r\n\r\n' >&3
+          && grep -q '"status":"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "8084:8084"
+    networks:
+      - backend
+
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: postgres
     restart: always
     environment:
@@ -118,13 +175,31 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
-      - ./postgres/seed/init-customer.sql:/docker-entrypoint-initdb.d/09-seed-customer.sql
-      - ./postgres/seed/init-vehicle.sql:/docker-entrypoint-initdb.d/10-seed-vehicle.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
+
+  # Dev-only: loads postgres/seed into customer_db and vehicle_db once the
+  # services' migrations have created the tables, then exits. Skips tables
+  # that already have rows. Leave it out with --scale db-seed=0.
+  db-seed:
+    image: postgres:16
+    container_name: db-seed
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    volumes:
+      - ./postgres/seed:/seed:ro
+    entrypoint: ["sh", "/seed/seed.sh"]
+    restart: "no"
     networks:
       - backend
 
@@ -151,7 +226,7 @@ services:
       - backend
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.10-alpine
     container_name: redis
     ports:
       - "6379:6379"
@@ -194,7 +269,7 @@ services:
 
   # Metrics exporters for the stateful infra (scraped by prometheus/prometheus.yml).
   postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     container_name: postgres-exporter
     depends_on:
       postgres:
@@ -207,7 +282,7 @@ services:
       - backend
 
   kafka-exporter:
-    image: danielqsj/kafka-exporter:v1.8.0
+    image: danielqsj/kafka-exporter:v1.10.0
     container_name: kafka-exporter
     # exits if the broker isn't up yet
     restart: on-failure
@@ -218,7 +293,7 @@ services:
       - backend
 
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.15.0
     container_name: prometheus
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -249,7 +324,7 @@ services:
       - backend
 
   loki:
-    image: grafana/loki:3.5.5
+    image: grafana/loki:3.7.8
     container_name: loki
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
@@ -261,7 +336,7 @@ services:
       - backend
 
   alloy:
-    image: grafana/alloy:v1.10.2
+    image: grafana/alloy:v1.20.1
     container_name: alloy
     depends_on:
       - loki

@@ -1,58 +1,6 @@
 \connect vehicle_db
 
-CREATE TABLE IF NOT EXISTS vehicle_model (
-    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    make       varchar(100) NOT NULL,
-    model      varchar(100) NOT NULL,
-    year       smallint CHECK (year BETWEEN 1900 AND 2100),
-    created_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (make, model, year)
-);
-
-CREATE TABLE IF NOT EXISTS vehicle (
-    id                BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vin               varchar(17) NOT NULL UNIQUE,
-    license_plate     varchar(20),
-    vehicle_model_id  BIGINT NOT NULL REFERENCES vehicle_model(id) ON DELETE RESTRICT,
-    warranty_end_date date,
-    status            varchar(20) NOT NULL DEFAULT 'ACTIVE'
-                      CHECK (status IN ('ACTIVE', 'SOLD','SCRAPPED')),
-    created_at        timestamptz NOT NULL DEFAULT now(),
-    updated_at        timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_vehicle_model ON vehicle(vehicle_model_id);
-
-CREATE TABLE IF NOT EXISTS customer_vehicle (
-    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    customer_id BIGINT NOT NULL,
-    vehicle_id  BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE RESTRICT,
-    owned_from  date NOT NULL DEFAULT CURRENT_DATE,
-    owned_to    date,
-    status      varchar(20) NOT NULL DEFAULT 'CURRENT'
-                CHECK (status IN ('CURRENT','TRANSFERRED')),
-    created_at  timestamptz NOT NULL DEFAULT now(),
-    CHECK (owned_to IS NULL OR owned_to >= owned_from)
-);
-
-CREATE INDEX IF NOT EXISTS idx_cust_vehicle_customer ON customer_vehicle(customer_id);
-CREATE INDEX IF NOT EXISTS idx_cust_vehicle_vehicle  ON customer_vehicle(vehicle_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_vehicle_current_owner
-    ON customer_vehicle(vehicle_id) WHERE status = 'CURRENT';
-
-CREATE TABLE IF NOT EXISTS vehicle_material (
-    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vehicle_id   BIGINT NOT NULL REFERENCES vehicle(id) ON DELETE CASCADE,
-    material_id  BIGINT NOT NULL,
-    count        int NOT NULL CHECK (count > 0),
-    description  varchar(255),
-    installed_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (vehicle_id, material_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_veh_material_vehicle  ON vehicle_material(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_veh_material_material ON vehicle_material(material_id);
+-- Data only: the tables come from vehicle-service/migrations.
 
 INSERT INTO vehicle_model (make, model, year) VALUES
   ('Vauxhall', 'Impala', 2019),
