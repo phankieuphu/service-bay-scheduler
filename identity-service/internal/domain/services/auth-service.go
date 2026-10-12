@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"identity-service/config"
 	"identity-service/internal/constants"
@@ -15,8 +14,6 @@ import (
 	"identity-service/pkg/logger"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // refreshTokenBytes is the entropy of an opaque refresh token (256 bits).
@@ -75,58 +72,18 @@ func (s *AuthService) Register(ctx context.Context, register entity.Register) (e
 		return entity.User{}, ports.ErrRoleNotAllowed
 	}
 
-	hash, err := s.hasher.Hash(register.Password)
-	if err != nil {
-		return entity.User{}, err
-	}
-
-	now := s.now().UTC()
-	user := entity.User{
-		ID:           uuid.NewString(),
-		Email:        normalizeEmail(register.Email),
-		PasswordHash: hash,
-		Role:         register.Role,
-		Status:       constants.UserActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-
-	var created entity.User
-	err = s.txManager.RunInTx(ctx, func(ctx context.Context) error {
-		created, err = s.users.Create(ctx, user)
-		if err != nil {
-			return err
-		}
-
-		payload, err := json.Marshal(entity.UserEvent{
-			EventID:    uuid.NewString(),
-			EventType:  constants.UserCreated,
-			OccurredAt: now,
-			User: entity.UserEventPayload{
-				ID:     created.ID,
-				Email:  created.Email,
-				Role:   created.Role,
-				Status: created.Status,
-			},
-		})
-		if err != nil {
-			return err
-		}
-
-		return s.outbox.Create(ctx, entity.OutboxMessage{
-			Topic:   s.config.Kafka.ProducerTopic,
-			Key:     created.ID,
-			Payload: payload,
-		})
-	})
+	user, err := createUser(ctx, s.userDeps(), register)
 	if err != nil {
 		if !errors.Is(err, ports.ErrConflict) {
 			logger.ErrorContext(ctx, "failed to register user", "error", err)
 		}
 		return entity.User{}, err
 	}
+	return user, nil
+}
 
-	return created, nil
+func (s *AuthService) userDeps() userDeps {
+	return userDeps{config: s.config, users: s.users, outbox: s.outbox, txManager: s.txManager, hasher: s.hasher, now: s.now}
 }
 
 // Login implements [ports.AuthService].

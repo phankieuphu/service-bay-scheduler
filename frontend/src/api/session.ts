@@ -1,49 +1,58 @@
 import { ApiError, request } from './http'
 import { refresh, type TokenResponse } from './identity'
 
-// The refresh token outlives a page reload, so it's kept in localStorage.
-// The access token is short-lived (15 min) and only ever held in memory: a
-// reload just trades the refresh token for a new one.
-const REFRESH_TOKEN_KEY = 'service-bay.refresh-token'
+// The refresh token lives in an HttpOnly cookie that only the browser can
+// see, so this module can't tell whether one exists. SIGNED_IN_KEY is a
+// non-secret flag that remembers it probably does, so a reload knows to
+// try a refresh, and so other tabs can follow a sign-out. The access token
+// is short-lived (15 min) and only ever held in memory.
+const SIGNED_IN_KEY = 'service-bay.signed-in'
+
+// The refresh token from before it moved to a cookie. It's removed on load
+// and never read: it would still work until it expires, so leaving it in
+// localStorage would leave it open to XSS.
+const LEGACY_REFRESH_TOKEN_KEY = 'service-bay.refresh-token'
 
 let accessToken: string | null = null
 let inFlightRefresh: Promise<string> | null = null
 const endListeners = new Set<() => void>()
 
-function readRefreshToken(): string | null {
+function readSignedIn(): boolean {
   try {
-    return localStorage.getItem(REFRESH_TOKEN_KEY)
+    return localStorage.getItem(SIGNED_IN_KEY) !== null
   } catch {
-    return null
+    return false
   }
 }
 
-function writeRefreshToken(token: string | null) {
+function writeSignedIn(signedIn: boolean) {
   try {
-    if (token) localStorage.setItem(REFRESH_TOKEN_KEY, token)
-    else localStorage.removeItem(REFRESH_TOKEN_KEY)
+    if (signedIn) localStorage.setItem(SIGNED_IN_KEY, '1')
+    else localStorage.removeItem(SIGNED_IN_KEY)
   } catch {
     // Storage blocked (private mode etc.): the session still works until
     // the tab is closed or reloaded.
   }
 }
 
-export function hasSession(): boolean {
-  return accessToken !== null || readRefreshToken() !== null
+try {
+  localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY)
+} catch {
+  // storage blocked; nothing to clean up
 }
 
-export function getRefreshToken(): string | null {
-  return readRefreshToken()
+export function hasSession(): boolean {
+  return accessToken !== null || readSignedIn()
 }
 
 export function startSession(tokens: TokenResponse) {
   accessToken = tokens.access_token
-  writeRefreshToken(tokens.refresh_token)
+  writeSignedIn(true)
 }
 
 export function clearSession() {
   accessToken = null
-  writeRefreshToken(null)
+  writeSignedIn(false)
 }
 
 // onSessionEnded fires when the session is lost involuntarily: the refresh
@@ -59,32 +68,35 @@ function endSession() {
   endListeners.forEach((listener) => listener())
 }
 
-// Another tab signing out removes the shared refresh token; follow it.
+// Another tab signing out removes the flag; follow it.
 window.addEventListener('storage', (event) => {
-  if (event.key === REFRESH_TOKEN_KEY && event.newValue === null && accessToken !== null) {
+  if (event.key === SIGNED_IN_KEY && event.newValue === null && accessToken !== null) {
     endSession()
   }
 })
 
-// refreshAccessToken trades the stored refresh token for a new pair. The API
-// rotates refresh tokens — each one works exactly once — so concurrent
-// callers (parallel 401s, StrictMode's double-run effects) must share one
-// request; a second request with the same token would be rejected and sign
-// the user out.
+// inTabLock runs fn holding a lock shared by every tab of this origin, so
+// only one tab refreshes at a time. Where the Web Locks API is missing it
+// just runs fn.
+function inTabLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (!navigator.locks) return fn()
+  return navigator.locks.request('service-bay.refresh', fn)
+}
+
+// refreshAccessToken trades the refresh cookie for a new access token (and
+// a rotated cookie). The API rotates refresh tokens — each one works exactly
+// once — so concurrent callers in this tab (parallel 401s, StrictMode's
+// double-run effects) share one request, and tabs take turns through a
+// lock: a tab that waited sends the cookie the previous tab just got back.
 export function refreshAccessToken(): Promise<string> {
   inFlightRefresh ??= (async () => {
-    const refreshToken = readRefreshToken()
-    if (!refreshToken) {
-      endSession()
-      throw new ApiError(401, 'Not signed in.')
-    }
     try {
-      const tokens = await refresh(refreshToken)
+      const tokens = await inTabLock(refresh)
       startSession(tokens)
       return tokens.access_token
     } catch (err) {
       // Only a definite rejection ends the session. A network error or 5xx
-      // is transient: keep the refresh token so a retry can still use it.
+      // is transient: the cookie is still there for a retry.
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         endSession()
       }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import * as identity from '../api/identity'
 import {
   clearSession,
-  getRefreshToken,
   hasSession,
   onSessionEnded,
   startSession,
@@ -29,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         if (cancelled) return
         if (!hasSession()) {
-          // The refresh token was rejected and has been cleared.
+          // The refresh cookie was rejected (or there wasn't one).
           setState({ status: 'signed-out', notice: SESSION_EXPIRED })
         } else {
           setState({
@@ -68,12 +67,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(async () => {
-    const refreshToken = getRefreshToken()
     clearSession()
     setState({ status: 'signed-out' })
-    // Revoke server-side too. If this fails the token still expires on its
-    // own, and it's already gone from this browser, so don't surface it.
-    if (refreshToken) await identity.logout(refreshToken).catch(() => undefined)
+    // Revokes the refresh token and clears its cookie. If this fails the
+    // token still expires on its own, so don't surface it.
+    await identity.logout().catch(() => undefined)
   }, [])
 
   const retry = useCallback(() => {

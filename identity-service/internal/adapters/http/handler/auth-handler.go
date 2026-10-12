@@ -18,10 +18,11 @@ type AuthHandler struct {
 	service  ports.AuthService
 	tokens   ports.TokenIssuer
 	throttle *Throttle // nil disables rate limiting
+	cookies  RefreshCookies
 }
 
-func NewAuthHandler(service ports.AuthService, tokens ports.TokenIssuer, throttle *Throttle) *AuthHandler {
-	return &AuthHandler{service: service, tokens: tokens, throttle: throttle}
+func NewAuthHandler(service ports.AuthService, tokens ports.TokenIssuer, throttle *Throttle, cookies RefreshCookies) *AuthHandler {
+	return &AuthHandler{service: service, tokens: tokens, throttle: throttle, cookies: cookies}
 }
 
 func (h *AuthHandler) RegisterRoutes(r *gin.RouterGroup) {
@@ -99,37 +100,47 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	h.cookies.set(c, pair.RefreshToken, pair.RefreshExpiresAt)
 	c.JSON(http.StatusOK, dto.NewTokenResponse(pair, time.Now()))
 }
 
+// Refresh reads the refresh token from its cookie (never the body) and
+// sets the rotated one the same way.
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	var req dto.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	token, ok := h.cookies.read(c, true)
+	if !ok {
 		return
 	}
 
-	pair, err := h.service.Refresh(c.Request.Context(), req.RefreshToken)
+	pair, err := h.service.Refresh(c.Request.Context(), token)
 	if err != nil {
+		// The token is spent or invalid either way; don't keep sending it.
+		if errors.Is(err, ports.ErrInvalidToken) || errors.Is(err, ports.ErrUserInactive) {
+			h.cookies.clear(c)
+		}
 		writeError(c, err)
 		return
 	}
 
+	h.cookies.set(c, pair.RefreshToken, pair.RefreshExpiresAt)
 	c.JSON(http.StatusOK, dto.NewTokenResponse(pair, time.Now()))
 }
 
+// Logout revokes the cookie's refresh token, if any, and clears the cookie.
 func (h *AuthHandler) Logout(c *gin.Context) {
-	var req dto.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	token, ok := h.cookies.read(c, false)
+	if !ok {
 		return
 	}
 
-	if err := h.service.Logout(c.Request.Context(), req.RefreshToken); err != nil {
-		writeError(c, err)
-		return
+	if token != "" {
+		if err := h.service.Logout(c.Request.Context(), token); err != nil {
+			writeError(c, err)
+			return
+		}
 	}
 
+	h.cookies.clear(c)
 	c.Status(http.StatusNoContent)
 }
 
@@ -159,8 +170,10 @@ func writeError(c *gin.Context, err error) {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, ports.ErrInvalidCredentials), errors.Is(err, ports.ErrInvalidToken):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-	case errors.Is(err, ports.ErrUserInactive):
+	case errors.Is(err, ports.ErrUserInactive), errors.Is(err, ports.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, ports.ErrInvalidInput):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, ports.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	default:

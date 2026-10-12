@@ -16,6 +16,7 @@ type Config struct {
 	Logger
 	JWT
 	RateLimit
+	Admin
 }
 
 type Database struct {
@@ -43,6 +44,14 @@ type API struct {
 	// means none: the TCP peer address is the client, so a client can't
 	// dodge the per-IP limits by sending its own X-Forwarded-For.
 	TrustedProxies []string
+	// AllowedOrigins are the browser origins allowed to call this API with
+	// credentials (the refresh-token cookie). A cookie rules out the "*"
+	// wildcard, so they must be listed.
+	AllowedOrigins []string
+	// CookieSecure sets Secure on the refresh-token cookie. Only turn it
+	// off for local plain-HTTP setups that won't send Secure cookies (e.g.
+	// Safari or Postman against http://localhost).
+	CookieSecure bool
 }
 
 type Kafka struct {
@@ -92,6 +101,14 @@ type RateLimit struct {
 	RegisterWindow time.Duration
 }
 
+// Admin bootstraps the first ADMIN account on startup when both fields are
+// set and no admin exists yet (see AdminService.BootstrapAdmin). Unset
+// them once it exists; they're ignored from then on.
+type Admin struct {
+	Email    string
+	Password string
+}
+
 func LoadConfig() *Config {
 	return &Config{
 		Database: Database{
@@ -111,6 +128,8 @@ func LoadConfig() *Config {
 			ReadTimeout:    time.Duration(getEnvInt("API_READ_TIMEOUT_SEC", 30)) * time.Second,
 			WriteTimeout:   time.Duration(getEnvInt("API_WRITE_TIMEOUT_SEC", 30)) * time.Second,
 			TrustedProxies: getEnvList("API_TRUSTED_PROXIES"),
+			AllowedOrigins: getEnvListDefault("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
+			CookieSecure:   getEnvBool("AUTH_COOKIE_SECURE", true),
 		},
 		Kafka: Kafka{
 			Brokers:       []string{GetEnv("KAFKA_BROKERS", "localhost:9092")},
@@ -139,6 +158,10 @@ func LoadConfig() *Config {
 			LoginWindow:    time.Duration(getEnvInt("RATE_LIMIT_LOGIN_WINDOW_SEC", 900)) * time.Second,
 			RegisterPerIP:  getEnvInt("RATE_LIMIT_REGISTER_PER_IP", 20),
 			RegisterWindow: time.Duration(getEnvInt("RATE_LIMIT_REGISTER_WINDOW_SEC", 3600)) * time.Second,
+		},
+		Admin: Admin{
+			Email:    GetEnv("ADMIN_EMAIL", ""),
+			Password: GetEnv("ADMIN_PASSWORD", ""),
 		},
 	}
 }
@@ -173,6 +196,15 @@ func getEnvBool(key string, defaultValue bool) bool {
 		return defaultValue
 	}
 	return b
+}
+
+// getEnvListDefault is getEnvList, or defaultValue when the variable is
+// unset or empty.
+func getEnvListDefault(key string, defaultValue []string) []string {
+	if list := getEnvList(key); len(list) > 0 {
+		return list
+	}
+	return defaultValue
 }
 
 // getEnvList splits a comma-separated variable, dropping empty entries.

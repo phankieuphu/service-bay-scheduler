@@ -26,6 +26,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+      # Must match identity-service's: access tokens are verified with it.
+      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/readyz"]
       interval: 10s
@@ -63,6 +65,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
+      # Must match identity-service's: access tokens are verified with it.
+      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8081/readyz"]
       interval: 10s
@@ -101,6 +105,13 @@ services:
       # Local-dev only. Services that validate access tokens themselves
       # must share this value.
       JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+      # Plain HTTP locally: Safari and Postman won't store a Secure cookie
+      # from http://localhost.
+      AUTH_COOKIE_SECURE: "false"
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      # Local-dev only: creates this ADMIN on first start if none exists.
+      ADMIN_EMAIL: admin@servicebay.local
+      ADMIN_PASSWORD: admin-local-dev-pass
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8083/readyz"]
       interval: 10s

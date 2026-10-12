@@ -60,7 +60,7 @@ var testRateLimit = config.RateLimit{
 func newThrottledRouter(svc ports.AuthService, counter ports.AttemptCounter) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	NewAuthHandler(svc, mockTokens{}, NewThrottle(counter, testRateLimit)).RegisterRoutes(r.Group("/api/v1"))
+	NewAuthHandler(svc, mockTokens{}, NewThrottle(counter, testRateLimit), RefreshCookies{Secure: true}).RegisterRoutes(r.Group("/api/v1"))
 	return r
 }
 

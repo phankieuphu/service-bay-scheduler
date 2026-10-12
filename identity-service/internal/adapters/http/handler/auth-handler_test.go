@@ -40,7 +40,8 @@ func (m *mockAuthService) Me(ctx context.Context, userID string) (entity.User, e
 	return m.meFunc(ctx, userID)
 }
 
-// mockTokens accepts exactly one token, "good".
+// mockTokens accepts two tokens: "good" (a customer, user-1) and "admin"
+// (an admin, admin-1).
 type mockTokens struct{}
 
 func (mockTokens) IssueAccessToken(entity.User) (string, time.Time, error) {
@@ -48,16 +49,19 @@ func (mockTokens) IssueAccessToken(entity.User) (string, time.Time, error) {
 }
 
 func (mockTokens) ParseAccessToken(token string) (entity.AccessClaims, error) {
-	if token != "good" {
-		return entity.AccessClaims{}, ports.ErrInvalidToken
+	switch token {
+	case "good":
+		return entity.AccessClaims{UserID: "user-1", Role: constants.RoleCustomer}, nil
+	case "admin":
+		return entity.AccessClaims{UserID: "admin-1", Role: constants.RoleAdmin}, nil
 	}
-	return entity.AccessClaims{UserID: "user-1", Role: constants.RoleCustomer}, nil
+	return entity.AccessClaims{}, ports.ErrInvalidToken
 }
 
 func newTestRouter(svc ports.AuthService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	NewAuthHandler(svc, mockTokens{}, nil).RegisterRoutes(r.Group("/api/v1"))
+	NewAuthHandler(svc, mockTokens{}, nil, RefreshCookies{Secure: true}).RegisterRoutes(r.Group("/api/v1"))
 	return r
 }
 
@@ -111,6 +115,7 @@ func TestAuthHandler_Register(t *testing.T) {
 
 func TestAuthHandler_Login(t *testing.T) {
 	expires := time.Now().Add(15 * time.Minute)
+	refreshExpires := time.Now().Add(7 * 24 * time.Hour)
 	tests := []struct {
 		name     string
 		err      error
@@ -123,46 +128,131 @@ func TestAuthHandler_Login(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &mockAuthService{loginFunc: func(context.Context, string, string) (entity.TokenPair, error) {
-				return entity.TokenPair{AccessToken: "a", AccessExpiresAt: expires, RefreshToken: "r"}, tt.err
+				return entity.TokenPair{AccessToken: "a", AccessExpiresAt: expires, RefreshToken: "r", RefreshExpiresAt: refreshExpires}, tt.err
 			}}
 			w := do(newTestRouter(svc), http.MethodPost, "/api/v1/auth/login", `{"email":"jane@example.com","password":"x"}`, nil)
 			if w.Code != tt.wantCode {
 				t.Fatalf("code = %d, want %d; body %s", w.Code, tt.wantCode, w.Body)
 			}
 			if tt.err != nil {
+				if w.Header().Get("Set-Cookie") != "" {
+					t.Error("a failed login must not set a cookie")
+				}
 				return
 			}
-			var resp struct {
-				AccessToken  string `json:"access_token"`
-				TokenType    string `json:"token_type"`
-				ExpiresIn    int64  `json:"expires_in"`
-				RefreshToken string `json:"refresh_token"`
-			}
+			var resp map[string]any
 			_ = json.Unmarshal(w.Body.Bytes(), &resp)
-			if resp.AccessToken != "a" || resp.RefreshToken != "r" || resp.TokenType != "Bearer" || resp.ExpiresIn < 890 {
+			if resp["access_token"] != "a" || resp["token_type"] != "Bearer" || resp["expires_in"].(float64) < 890 {
 				t.Errorf("unexpected response %+v", resp)
 			}
+			if _, ok := resp["refresh_token"]; ok {
+				t.Error("the refresh token must not be in the body, where scripts can read it")
+			}
+			assertRefreshCookie(t, w, "r")
 		})
 	}
 }
 
-func TestAuthHandler_RefreshAndLogout(t *testing.T) {
-	svc := &mockAuthService{
-		refreshFunc: func(context.Context, string) (entity.TokenPair, error) {
-			return entity.TokenPair{}, ports.ErrInvalidToken
-		},
-		logoutFunc: func(context.Context, string) error { return nil },
+// assertRefreshCookie checks w set the refresh cookie to value with every
+// protective attribute.
+func assertRefreshCookie(t *testing.T, w *httptest.ResponseRecorder, value string) {
+	t.Helper()
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("got %d cookies, want 1", len(cookies))
 	}
+	c := cookies[0]
+	if c.Name != RefreshCookieName || c.Value != value || !c.HttpOnly || !c.Secure ||
+		c.SameSite != http.SameSiteStrictMode || c.Path != "/api/v1/auth" || c.MaxAge <= 0 {
+		t.Errorf("unexpected cookie %+v", c)
+	}
+}
+
+func refreshCookie(token string) map[string]string {
+	return map[string]string{"Cookie": RefreshCookieName + "=" + token, CSRFHeader: "fetch"}
+}
+
+func TestAuthHandler_Refresh(t *testing.T) {
+	refreshExpires := time.Now().Add(7 * 24 * time.Hour)
+	var gotToken string
+	svc := &mockAuthService{refreshFunc: func(_ context.Context, token string) (entity.TokenPair, error) {
+		gotToken = token
+		if token != "old" {
+			return entity.TokenPair{}, ports.ErrInvalidToken
+		}
+		return entity.TokenPair{AccessToken: "a2", AccessExpiresAt: time.Now().Add(time.Minute), RefreshToken: "new", RefreshExpiresAt: refreshExpires}, nil
+	}}
 	r := newTestRouter(svc)
 
-	if w := do(r, http.MethodPost, "/api/v1/auth/refresh", `{"refresh_token":"old"}`, nil); w.Code != http.StatusUnauthorized {
-		t.Errorf("refresh with bad token: code = %d, want 401", w.Code)
+	t.Run("rotates the cookie", func(t *testing.T) {
+		w := do(r, http.MethodPost, "/api/v1/auth/refresh", "", refreshCookie("old"))
+		if w.Code != http.StatusOK {
+			t.Fatalf("code = %d; body %s", w.Code, w.Body)
+		}
+		if gotToken != "old" {
+			t.Errorf("service got %q, want the cookie's token", gotToken)
+		}
+		assertRefreshCookie(t, w, "new")
+	})
+
+	t.Run("rejected token clears the cookie", func(t *testing.T) {
+		w := do(r, http.MethodPost, "/api/v1/auth/refresh", "", refreshCookie("spent"))
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("code = %d, want 401", w.Code)
+		}
+		if c := w.Result().Cookies(); len(c) != 1 || c[0].MaxAge >= 0 {
+			t.Errorf("cookie should be cleared, got %+v", c)
+		}
+	})
+
+	t.Run("no cookie", func(t *testing.T) {
+		if w := do(r, http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{CSRFHeader: "fetch"}); w.Code != http.StatusUnauthorized {
+			t.Errorf("code = %d, want 401", w.Code)
+		}
+	})
+
+	t.Run("a token in the body is ignored", func(t *testing.T) {
+		if w := do(r, http.MethodPost, "/api/v1/auth/refresh", `{"refresh_token":"old"}`, map[string]string{CSRFHeader: "fetch"}); w.Code != http.StatusUnauthorized {
+			t.Errorf("code = %d, want 401", w.Code)
+		}
+	})
+
+	t.Run("missing CSRF header", func(t *testing.T) {
+		gotToken = ""
+		w := do(r, http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{"Cookie": RefreshCookieName + "=old"})
+		if w.Code != http.StatusForbidden || gotToken != "" {
+			t.Errorf("code = %d (service got %q), want 403 without reaching the service", w.Code, gotToken)
+		}
+	})
+}
+
+func TestAuthHandler_Logout(t *testing.T) {
+	var revoked []string
+	svc := &mockAuthService{logoutFunc: func(_ context.Context, token string) error {
+		revoked = append(revoked, token)
+		return nil
+	}}
+	r := newTestRouter(svc)
+
+	w := do(r, http.MethodPost, "/api/v1/auth/logout", "", refreshCookie("r"))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("code = %d, want 204", w.Code)
 	}
-	if w := do(r, http.MethodPost, "/api/v1/auth/refresh", `{}`, nil); w.Code != http.StatusBadRequest {
-		t.Errorf("refresh without token: code = %d, want 400", w.Code)
+	if len(revoked) != 1 || revoked[0] != "r" {
+		t.Errorf("revoked %v, want [r]", revoked)
 	}
-	if w := do(r, http.MethodPost, "/api/v1/auth/logout", `{"refresh_token":"r"}`, nil); w.Code != http.StatusNoContent {
-		t.Errorf("logout: code = %d, want 204", w.Code)
+	if c := w.Result().Cookies(); len(c) != 1 || c[0].MaxAge >= 0 {
+		t.Errorf("cookie should be cleared, got %+v", c)
+	}
+
+	if w := do(r, http.MethodPost, "/api/v1/auth/logout", "", map[string]string{CSRFHeader: "fetch"}); w.Code != http.StatusNoContent {
+		t.Errorf("logout without a cookie: code = %d, want 204 (idempotent)", w.Code)
+	}
+	if len(revoked) != 1 {
+		t.Error("nothing to revoke without a cookie")
+	}
+	if w := do(r, http.MethodPost, "/api/v1/auth/logout", "", map[string]string{"Cookie": RefreshCookieName + "=r"}); w.Code != http.StatusForbidden {
+		t.Errorf("logout without CSRF header: code = %d, want 403", w.Code)
 	}
 }
 

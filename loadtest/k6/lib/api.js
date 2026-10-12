@@ -7,11 +7,11 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Rate } from 'k6/metrics';
-import { CUSTOMER_URL, VEHICLE_URL, SEED } from './config.js';
+import { CUSTOMER_URL, VEHICLE_URL, SEED, ACCESS_TOKEN } from './config.js';
 
 const C = `${CUSTOMER_URL}/api/v1`;
 const V = `${VEHICLE_URL}/api/v1`;
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const JSON_HEADERS = { 'Content-Type': 'application/json', Authorization: `Bearer ${ACCESS_TOKEN}` };
 
 export const readMissRate = new Rate('read_miss_rate');
 export const updateConflictRate = new Rate('update_conflict_rate');

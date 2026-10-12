@@ -10,6 +10,7 @@ import (
 	ginhttp "vehicle-service/internal/adapters/http"
 	"vehicle-service/internal/adapters/kafka"
 	"vehicle-service/internal/adapters/repository"
+	"vehicle-service/internal/adapters/security"
 	"vehicle-service/internal/domain/services"
 	"vehicle-service/migrations"
 	"vehicle-service/pkg/logger"
@@ -34,6 +35,11 @@ func VehicleApplication(ctx context.Context) {
 	godotenv.Load()
 	cfg := config.LoadConfig()
 	logger.Init(cfg.Logger.ToOptions())
+
+	tokenVerifier, err := security.NewJWTVerifier(cfg.JWT)
+	if err != nil {
+		logger.Fatal("failed to init JWT verifier", "error", err)
+	}
 
 	// database
 	database, err := database_provider.NewPostgresClient(*cfg)
@@ -105,7 +111,7 @@ func VehicleApplication(ctx context.Context) {
 		health.Check{Name: "kafka", Func: kafkaProducer.Ping},
 		health.Check{Name: "redis", Func: redisCache.Ping},
 	))
-	httpServer := ginhttp.NewServer(cfg.API, entryVehicleService, h)
+	httpServer := ginhttp.NewServer(cfg.API, entryVehicleService, tokenVerifier, h)
 
 	logger.Info("Vehicle Application Started")
 

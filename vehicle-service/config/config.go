@@ -12,6 +12,7 @@ type Config struct {
 	Kafka
 	Redis
 	Logger
+	JWT
 }
 
 type Database struct {
@@ -70,6 +71,13 @@ type Logger struct {
 	AddSource bool
 }
 
+// JWT verifies identity-service's access tokens. Secret and Issuer must
+// match identity-service's JWT_SECRET and JWT_ISSUER.
+type JWT struct {
+	Secret string
+	Issuer string
+}
+
 func LoadConfig() *Config {
 	return &Config{
 		Database: Database{
@@ -106,6 +114,10 @@ func LoadConfig() *Config {
 			Level:     GetEnv("LOG_LEVEL", "info"),
 			Format:    GetEnv("LOG_FORMAT", "json"),
 			AddSource: getEnvBool("LOG_ADD_SOURCE", false),
+		},
+		JWT: JWT{
+			Secret: GetEnv("JWT_SECRET", ""),
+			Issuer: GetEnv("JWT_ISSUER", "identity-service"),
 		},
 	}
 }

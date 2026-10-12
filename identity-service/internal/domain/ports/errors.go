@@ -26,4 +26,13 @@ var (
 	// ErrRoleNotAllowed is returned when registration asks for a role that
 	// can't be self-assigned (see constants.Role.SelfRegisterable).
 	ErrRoleNotAllowed = errors.New("auth: role cannot be self-registered")
+
+	// ErrForbidden is returned when an authenticated caller isn't allowed
+	// to do something, e.g. a non-admin calling an admin endpoint.
+	ErrForbidden = errors.New("auth: forbidden")
+
+	// ErrInvalidInput is returned (wrapped, with the reason) for a request
+	// that is well-formed but not allowed, e.g. an admin locking their own
+	// account.
+	ErrInvalidInput = errors.New("invalid input")
 )

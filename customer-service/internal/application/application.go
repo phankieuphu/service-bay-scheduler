@@ -9,6 +9,7 @@ import (
 	"customer-service/internal/adapters/http/handler"
 	"customer-service/internal/adapters/kafka"
 	"customer-service/internal/adapters/repository"
+	"customer-service/internal/adapters/security"
 	"customer-service/internal/domain/services"
 	"customer-service/migrations"
 	"customer-service/pkg/logger"
@@ -35,6 +36,11 @@ func CustomerApplication(ctx context.Context) {
 	godotenv.Load()
 	cfg := config.LoadConfig()
 	logger.Init(cfg.Logger.ToOptions())
+
+	tokenVerifier, err := security.NewJWTVerifier(cfg.JWT)
+	if err != nil {
+		logger.Fatal("failed to init JWT verifier", "error", err)
+	}
 
 	// database
 	database, err := database_provider.NewPostgresClient(*cfg)
@@ -93,7 +99,7 @@ func CustomerApplication(ctx context.Context) {
 		health.Check{Name: "kafka", Func: kafkaProducer.Ping},
 		health.Check{Name: "redis", Func: redisCache.Ping},
 	))
-	httpServer := ginhttp.NewServer(cfg.API, entryCustomerService, h)
+	httpServer := ginhttp.NewServer(cfg.API, entryCustomerService, tokenVerifier, h)
 
 	logger.Info("Customer Application Started")
 

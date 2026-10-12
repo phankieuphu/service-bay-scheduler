@@ -10,6 +10,7 @@ import (
 	"identity-service/internal/adapters/kafka"
 	"identity-service/internal/adapters/repository"
 	"identity-service/internal/adapters/security"
+	"identity-service/internal/domain/ports"
 	"identity-service/internal/domain/services"
 	"identity-service/migrations"
 	"identity-service/pkg/logger"
@@ -74,6 +75,9 @@ func IdentityApplication(ctx context.Context) {
 	if err != nil {
 		logger.Fatal("failed to init auth service", "error", err)
 	}
+	entryAdminService := services.NewAdminService(*cfg, entryUserRepository, entryOutboxRepository, txManager,
+		security.NewBcryptHasher(bcryptCost))
+	bootstrapAdmin(ctx, cfg.Admin, entryAdminService)
 
 	// Background workers run on their own context, cancelled only after the
 	// HTTP server has drained, so the outbox relay keeps running while
@@ -99,7 +103,7 @@ func IdentityApplication(ctx context.Context) {
 		health.Check{Name: "redis", Critical: true, Func: redisCache.Ping},
 	))
 	throttle := handler.NewThrottle(redisCache, cfg.RateLimit)
-	httpServer, err := ginhttp.NewServer(cfg.API, entryAuthService, tokenIssuer, throttle, h)
+	httpServer, err := ginhttp.NewServer(cfg.API, entryAuthService, entryAdminService, tokenIssuer, throttle, h)
 	if err != nil {
 		logger.Fatal("failed to init HTTP server", "error", err)
 	}
@@ -142,6 +146,23 @@ func IdentityApplication(ctx context.Context) {
 	}
 
 	logger.Info("Identity Application stopped")
+}
+
+// bootstrapAdmin creates the first ADMIN from ADMIN_EMAIL/ADMIN_PASSWORD
+// when both are set and no admin exists yet; otherwise it does nothing.
+// A failure is logged, not fatal: the service is still useful without an
+// admin, and the env can be fixed on the next start.
+func bootstrapAdmin(ctx context.Context, cfg config.Admin, admins ports.AdminService) {
+	if cfg.Email == "" || cfg.Password == "" {
+		return
+	}
+	created, err := admins.BootstrapAdmin(ctx, cfg.Email, cfg.Password)
+	switch {
+	case err != nil:
+		logger.Error("failed to bootstrap admin", "error", err)
+	case created:
+		logger.Info("bootstrapped the first admin from ADMIN_EMAIL")
+	}
 }
 
 // migrateDatabase applies pending schema migrations before anything uses

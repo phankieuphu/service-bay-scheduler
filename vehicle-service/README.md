@@ -14,7 +14,7 @@ Schema: [`postgres/init/03-vehicle-service.sql`](../postgres/init/03-vehicle-ser
 
 ## API
 
-All under `/api/v1`. Errors are `{"error": "..."}`: `400` bad input, `404` unknown vehicle, `409` conflict (duplicate, stale `updated_at`, already owned, or scrapped), `500` generic.
+All under `/api/v1`, and all need an identity-service access token (`Authorization: Bearer …`). Reads are open to any role. Registering, updating, assigning an owner and transferring need `TECHNICIAN`, `MANAGER` or `ADMIN`. Errors are `{"error": "..."}`: `401` missing or invalid token, `403` role not allowed, `400` bad input, `404` unknown vehicle, `409` conflict (duplicate, stale `updated_at`, already owned, or scrapped), `500` generic.
 
 | Method & path | Body / query | Success |
 |---|---|---|
