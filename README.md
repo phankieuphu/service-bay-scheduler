@@ -40,6 +40,7 @@ Known gaps:
 * [AI Agents](docs/ai-agents.md): PR description review and issue/PR labeler workflows: what they do, setup, and troubleshooting
 * Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
+* [Deploying (Railway + Vercel)](docs/railway.md)
 * [Load tests](loadtest/README.md)
 
 ---
