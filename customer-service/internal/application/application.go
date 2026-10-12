@@ -10,12 +10,14 @@ import (
 	"customer-service/internal/adapters/kafka"
 	"customer-service/internal/adapters/repository"
 	"customer-service/internal/domain/services"
+	"customer-service/migrations"
 	"customer-service/pkg/logger"
 	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
 	health "github.com/phankieuphu/go-health-check"
+	"gorm.io/gorm"
 )
 
 // outboxRelayInterval is how often the outbox table is polled for
@@ -38,6 +40,11 @@ func CustomerApplication(ctx context.Context) {
 	database, err := database_provider.NewPostgresClient(*cfg)
 	if err != nil {
 		logger.Fatal("failed to init database", "error", err)
+	}
+	if cfg.Database.AutoMigrate {
+		if err := migrateDatabase(ctx, database); err != nil {
+			logger.Fatal("failed to migrate database", "error", err)
+		}
 	}
 
 	// Kafka producer
@@ -133,4 +140,18 @@ func CustomerApplication(ctx context.Context) {
 	}
 
 	logger.Info("Customer Application stopped")
+}
+
+// migrateDatabase applies pending schema migrations before anything uses
+// the database.
+func migrateDatabase(ctx context.Context, database *gorm.DB) error {
+	sqlDB, err := database.DB()
+	if err != nil {
+		return err
+	}
+	results, err := migrations.Up(ctx, sqlDB)
+	for _, r := range results {
+		logger.Info("applied migration", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
+	}
+	return err
 }

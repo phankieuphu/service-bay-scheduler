@@ -26,6 +26,18 @@ jobs:
     defaults:
       run:
         working-directory: ${{ matrix.service }}
+    # For the migrations tests, which create and drop scratch databases.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -73,20 +85,20 @@ jobs:
       - name: docker build
         run: docker buildx build --load -t ${{ matrix.service }}:ci ${{ matrix.service }}
 
-  postgres-init:
-    # The init scripts only run on an empty data volume, so a broken one
-    # otherwise shows up as a postgres container that exits on a fresh
-    # checkout (#50). Mounts the same files docker-compose.yml does.
+  postgres:
+    # Builds every database the way a fresh docker-compose volume does:
+    # postgres/init on the empty volume (CREATE DATABASE, plus schemas for
+    # services not built yet), each service's migrations, then the dev
+    # seeds. A broken init script shows up as a container that exits (#50).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Run postgres/init and seeds on an empty database
+      - name: Run postgres/init on an empty database
         run: |
           image=$(sed -n 's/^ *image: \(postgres:.*\)$/\1/p' docker-compose.yml | head -1)
-          docker run -d --name pg -e POSTGRES_PASSWORD=postgres \
+          docker run -d --name pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
             -v "$PWD/postgres/init:/docker-entrypoint-initdb.d:ro" \
-            -v "$PWD/postgres/seed/init-customer.sql:/docker-entrypoint-initdb.d/09-seed-customer.sql:ro" \
-            -v "$PWD/postgres/seed/init-vehicle.sql:/docker-entrypoint-initdb.d/10-seed-vehicle.sql:ro" \
+            -v "$PWD/postgres/seed:/seed:ro" \
             "$image"
           for _ in $(seq 1 90); do
             if [ "$(docker inspect -f '{{.State.Running}}' pg)" != "true" ]; then
@@ -104,3 +116,22 @@ jobs:
           echo "::error::postgres did not become ready in 180s"
           docker logs pg
           exit 1
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: identity-service/go.mod
+          cache-dependency-path: "*/go.sum"
+      - name: Apply each service's migrations
+        run: |
+          for svc in identity customer vehicle; do
+            (cd "$svc-service" && DB_HOST=localhost DB_PASSWORD=postgres DB_NAME="${svc}_db" go run ./cmd/migrate up)
+          done
+      - name: Load the dev seeds
+        run: |
+          docker exec pg sh /seed/seed.sh
+          docker exec pg psql -U postgres -d customer_db -Atc "SELECT 'customers', count(*) FROM customer"
+          docker exec pg psql -U postgres -d vehicle_db -Atc "SELECT 'vehicles', count(*) FROM vehicle"
+      - name: Migrations are idempotent
+        run: |
+          for svc in identity customer vehicle; do
+            (cd "$svc-service" && DB_HOST=localhost DB_PASSWORD=postgres DB_NAME="${svc}_db" go run ./cmd/migrate up | tee /dev/stderr | grep -q "no pending migrations")
+          done

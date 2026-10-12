@@ -11,10 +11,12 @@ import (
 	"vehicle-service/internal/adapters/kafka"
 	"vehicle-service/internal/adapters/repository"
 	"vehicle-service/internal/domain/services"
+	"vehicle-service/migrations"
 	"vehicle-service/pkg/logger"
 
 	"github.com/joho/godotenv"
 	health "github.com/phankieuphu/go-health-check"
+	"gorm.io/gorm"
 )
 
 // outboxRelayInterval is how often the outbox table is polled for
@@ -37,6 +39,11 @@ func VehicleApplication(ctx context.Context) {
 	database, err := database_provider.NewPostgresClient(*cfg)
 	if err != nil {
 		logger.Fatal("failed to init database", "error", err)
+	}
+	if cfg.Database.AutoMigrate {
+		if err := migrateDatabase(ctx, database); err != nil {
+			logger.Fatal("failed to migrate database", "error", err)
+		}
 	}
 
 	// Kafka producer
@@ -143,4 +150,18 @@ func VehicleApplication(ctx context.Context) {
 	}
 
 	logger.Info("Vehicle Application stopped")
+}
+
+// migrateDatabase applies pending schema migrations before anything uses
+// the database.
+func migrateDatabase(ctx context.Context, database *gorm.DB) error {
+	sqlDB, err := database.DB()
+	if err != nil {
+		return err
+	}
+	results, err := migrations.Up(ctx, sqlDB)
+	for _, r := range results {
+		logger.Info("applied migration", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
+	}
+	return err
 }
