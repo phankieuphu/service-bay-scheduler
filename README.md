@@ -216,6 +216,8 @@ go test ./internal/domain/services/ -run TestVehicleService_TransferVehicle   # 
 
 Test files must end in `_test.go` (underscore). A file ending in `-test.go` compiles as normal source, and `go test` never runs its tests.
 
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every PR and push to `master`: `gofmt -l`, `go build`, `go vet` and `go test -race` per service, `npm run build` and `npm run lint` for the frontend, a `docker build` of each service, and `postgres/init` plus seeds on an empty database. Run `gofmt -w .` before pushing, or the `gofmt` step fails.
+
 Against a running stack:
 
 ```bash
