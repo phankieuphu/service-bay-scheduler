@@ -4,24 +4,25 @@ import { useAuth } from './auth/auth-context'
 import { AccountPanel } from './components/AccountPanel'
 import { AuthScreen } from './components/AuthScreen'
 import { Brand } from './components/Brand'
+import { CustomerArea } from './components/CustomerArea'
 import { CustomersPage } from './components/CustomersPage'
 import { Tabs } from './components/Tabs'
 import { UserMenu } from './components/UserMenu'
 import { VehiclesPage } from './components/VehiclesPage'
 import './App.css'
 
-type Section = 'customers' | 'vehicles' | 'account'
+type Section = 'customers' | 'vehicles' | 'book' | 'appointments' | 'account'
 
 // The Customers and Vehicles sections are staff tools: customer-service
-// only serves staff, and vehicle changes need a staff role. A CUSTOMER sees
-// just their account until customer self-service exists.
+// only serves staff, and vehicle changes need a staff role. A CUSTOMER gets
+// booking and their own appointments instead.
 function isStaff(user: User): boolean {
   return user.role !== 'CUSTOMER'
 }
 
 function Workspace({ user }: { user: User }) {
   const staff = isStaff(user)
-  const [section, setSection] = useState<Section>(staff ? 'customers' : 'account')
+  const [section, setSection] = useState<Section>(staff ? 'customers' : 'book')
   // Set when another section links to a vehicle ("Open" on a customer's
   // vehicle list); VehiclesPage opens it on mount.
   const [vehicleToOpen, setVehicleToOpen] = useState<number | null>(null)
@@ -37,7 +38,11 @@ function Workspace({ user }: { user: User }) {
         { id: 'vehicles', label: 'Vehicles' },
         { id: 'account', label: 'Account' },
       ]
-    : [{ id: 'account', label: 'Account' }]
+    : [
+        { id: 'book', label: 'Book a service' },
+        { id: 'appointments', label: 'My appointments' },
+        { id: 'account', label: 'Account' },
+      ]
 
   return (
     <>
@@ -58,14 +63,11 @@ function Workspace({ user }: { user: User }) {
       </header>
 
       <main className="app-main">
-        {!staff && (
-          <p className="message info">
-            Booking and tracking your own vehicles is coming soon. The customer and vehicle tools
-            are for dealership staff.
-          </p>
-        )}
         {section === 'customers' && <CustomersPage onOpenVehicle={openVehicle} />}
         {section === 'vehicles' && <VehiclesPage initialVehicleId={vehicleToOpen} />}
+        {(section === 'book' || section === 'appointments') && (
+          <CustomerArea section={section} onNavigate={setSection} />
+        )}
         {section === 'account' && <AccountPanel user={user} />}
       </main>
     </>

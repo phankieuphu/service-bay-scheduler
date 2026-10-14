@@ -44,6 +44,7 @@ func NewCustomerEvent[T any](eventType EventType, occurredAt time.Time, payload 
 // BirthDay is a calendar date, so it's sent as "2006-01-02", not a timestamp.
 type CustomerState struct {
 	ID        int64                    `json:"id"`
+	UserID    string                   `json:"user_id,omitempty"`
 	Name      string                   `json:"name"`
 	Email     string                   `json:"email"`
 	Phone     string                   `json:"phone,omitempty"`
@@ -56,6 +57,7 @@ type CustomerState struct {
 func NewCustomerState(c entity.Customer) CustomerState {
 	state := CustomerState{
 		ID:        c.ID,
+		UserID:    c.UserID,
 		Name:      c.Name,
 		Email:     c.Email,
 		Phone:     c.Phone,

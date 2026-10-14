@@ -9,6 +9,7 @@ import (
 
 type Customer struct {
 	ID        int64                    `json:"id" gorm:"column:id;type:bigint"`
+	UserID    *string                  `json:"user_id" gorm:"column:user_id;type:uuid"`
 	Name      string                   `json:"name" gorm:"column:name;type:varchar;size:255"`
 	Email     string                   `json:"email" gorm:"column:email;type:varchar;size:255"`
 	Phone     string                   `json:"phone" gorm:"column:phone;type:varchar;size:30"`

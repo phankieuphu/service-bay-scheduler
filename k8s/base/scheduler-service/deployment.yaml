@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-service-config
+  namespace: service-bay
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: scheduler_db
+  DB_SSLMODE: disable
+  API_PORT: "8085"
+  KAFKA_BROKERS: kafka:9092
+  # Booking checks the caller's profile and vehicles with these, forwarding
+  # the caller's own access token.
+  CUSTOMER_API_URL: http://customer-service:8080/api/v1
+  VEHICLE_API_URL: http://vehicle-service:8081/api/v1
+  # Pool per pod; see customer-service's budget note.
+  DB_MAX_OPEN_CONNS: "10"
+  DB_MAX_IDLE_CONNS: "5"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler-service
+  namespace: service-bay
+spec:
+  # One replica until booking load is measured; the no-double-booking
+  # guarantee is a database constraint, so more replicas would be safe.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scheduler-service
+  template:
+    metadata:
+      labels:
+        app: scheduler-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8085"
+    spec:
+      containers:
+        - name: scheduler-service
+          image: scheduler-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8085
+          # /healthz only says the process is up; /readyz also checks
+          # Postgres. Liveness must not use /readyz, or a database outage
+          # would restart every pod.
+          startupProbe:
+            httpGet: { path: /healthz, port: 8085 }
+            periodSeconds: 2
+            failureThreshold: 30   # up to 60s to connect to Postgres/Kafka
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8085 }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8085 }
+            periodSeconds: 10
+            timeoutSeconds: 3      # the checks themselves time out at 2s
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: scheduler-service-config
+          env:
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            # identity-service's secret: access tokens are verified with it.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: identity-jwt
+                  key: JWT_SECRET
+            - name: GOMEMLIMIT # ~85% of the memory limit, so the GC works harder before an OOM kill
+              value: "108MiB"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scheduler-service
+  namespace: service-bay
+spec:
+  type: NodePort
+  selector:
+    app: scheduler-service
+  ports:
+    - port: 8085
+      targetPort: 8085
+      nodePort: 30085

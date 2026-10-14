@@ -23,6 +23,16 @@ type MockCustomerRepository struct {
 	UpdateFunc     func(ctx context.Context, customer entity.Customer) error
 	DeleteFunc     func(ctx context.Context, id int64) error
 	SoftDeleteFunc func(ctx context.Context, id int64) error
+
+	GetByUserIDFunc     func(ctx context.Context, userID string) (entity.Customer, error)
+	LinkUserByEmailFunc func(ctx context.Context, userID, email string) (entity.Customer, error)
+}
+
+func (m *MockCustomerRepository) GetByUserID(ctx context.Context, userID string) (entity.Customer, error) {
+	return m.GetByUserIDFunc(ctx, userID)
+}
+func (m *MockCustomerRepository) LinkUserByEmail(ctx context.Context, userID, email string) (entity.Customer, error) {
+	return m.LinkUserByEmailFunc(ctx, userID, email)
 }
 
 func (m *MockCustomerRepository) GetByID(ctx context.Context, id int64) (entity.Customer, error) {

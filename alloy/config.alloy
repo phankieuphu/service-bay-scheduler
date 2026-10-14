@@ -29,7 +29,7 @@ loki.source.docker "containers" {
 // Our Go services log JSON (slog); promote its level to a label so it can be filtered on.
 loki.process "app" {
   stage.match {
-    selector = "{service=~\"customer-service|vehicle-service\"}"
+    selector = "{service=~\"customer-service|vehicle-service|scheduler-service\"}"
 
     stage.json {
       expressions = { level = "level" }

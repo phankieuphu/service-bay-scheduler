@@ -1,0 +1,143 @@
+package application
+
+import (
+	"context"
+	"scheduler-service/config"
+	"scheduler-service/internal/adapters/client"
+	database_provider "scheduler-service/internal/adapters/database/provider"
+	ginhttp "scheduler-service/internal/adapters/http"
+	"scheduler-service/internal/adapters/kafka"
+	"scheduler-service/internal/adapters/repository"
+	"scheduler-service/internal/adapters/security"
+	"scheduler-service/internal/domain/services"
+	"scheduler-service/migrations"
+	"scheduler-service/pkg/logger"
+	"sync"
+	"time"
+
+	"github.com/joho/godotenv"
+	health "github.com/phankieuphu/go-health-check"
+	"gorm.io/gorm"
+)
+
+// outboxRelayInterval is how often the outbox table is polled for
+// messages to publish to Kafka.
+const outboxRelayInterval = 2 * time.Second
+
+// shutdownTimeout bounds how long in-flight HTTP requests get to finish
+// once a shutdown signal arrives, before the server is forcibly closed.
+const shutdownTimeout = 15 * time.Second
+
+func SchedulerApplication(ctx context.Context) {
+	godotenv.Load()
+	cfg := config.LoadConfig()
+	logger.Init(cfg.Logger.ToOptions())
+
+	tokenVerifier, err := security.NewJWTVerifier(cfg.JWT)
+	if err != nil {
+		logger.Fatal("failed to init JWT verifier", "error", err)
+	}
+
+	// database
+	database, err := database_provider.NewPostgresClient(*cfg)
+	if err != nil {
+		logger.Fatal("failed to init database", "error", err)
+	}
+	if cfg.Database.AutoMigrate {
+		if err := migrateDatabase(ctx, database); err != nil {
+			logger.Fatal("failed to migrate database", "error", err)
+		}
+	}
+
+	// Kafka producer
+	kafkaProducer, err := kafka.NewProducer(cfg.Kafka)
+	if err != nil {
+		logger.Fatal("failed to init Kafka producer", "error", err)
+	}
+
+	// repository & service
+	txManager := database_provider.NewTxManager(database)
+	catalogRepository := repository.NewCatalogRepository(database)
+	appointmentRepository := repository.NewAppointmentRepository(database)
+	outboxRepository := repository.NewOutboxRepository(database)
+	bookingService := services.NewBookingService(
+		catalogRepository,
+		appointmentRepository,
+		outboxRepository,
+		txManager,
+		client.NewCustomerClient(cfg.Upstream.CustomerAPIURL, cfg.Upstream.Timeout),
+		client.NewVehicleClient(cfg.Upstream.VehicleAPIURL, cfg.Upstream.Timeout),
+	)
+
+	// Background workers run on their own context, cancelled only after the
+	// HTTP server has drained, so the outbox relay keeps running while
+	// in-flight requests are still writing outbox rows.
+	workerCtx, stopWorkers := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopWorkers()
+	var workers sync.WaitGroup
+
+	// Outbox relay: delivers rows written by the service above to Kafka.
+	outboxRelay := kafka.NewOutboxRelay(kafkaProducer, outboxRepository, outboxRelayInterval)
+	workers.Go(func() { outboxRelay.Start(workerCtx) })
+
+	// HTTP server (gin)
+	sqlDB, err := database.DB()
+	if err != nil {
+		logger.Fatal("failed to get database handle", "error", err)
+	}
+	h := health.New(health.WithTimeout(2*time.Second), health.WithChecks(
+		health.Check{Name: "postgres", Critical: true, Func: sqlDB.PingContext},
+		health.Check{Name: "kafka", Func: kafkaProducer.Ping},
+	))
+	httpServer := ginhttp.NewServer(cfg.API, bookingService, tokenVerifier, h)
+
+	logger.Info("Scheduler Application Started")
+
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- httpServer.Start() }()
+
+	select {
+	case <-ctx.Done():
+		logger.Info("shutdown signal received, shutting down")
+	case err := <-serverErr:
+		if err != nil {
+			logger.Error("HTTP server error, shutting down", "error", err)
+		}
+	}
+
+	// 1. Stop accepting requests and let in-flight ones finish.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("HTTP server shutdown", "error", err)
+	}
+
+	// 2. Stop the outbox relay and wait for an in-progress batch to finish
+	//    before closing what it uses.
+	stopWorkers()
+	workers.Wait()
+
+	// 3. Release connections.
+	if err := kafkaProducer.Close(); err != nil {
+		logger.Error("close Kafka producer", "error", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		logger.Error("close database", "error", err)
+	}
+
+	logger.Info("Scheduler Application stopped")
+}
+
+// migrateDatabase applies pending schema migrations before anything uses
+// the database.
+func migrateDatabase(ctx context.Context, database *gorm.DB) error {
+	sqlDB, err := database.DB()
+	if err != nil {
+		return err
+	}
+	results, err := migrations.Up(ctx, sqlDB)
+	for _, r := range results {
+		logger.Info("applied migration", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
+	}
+	return err
+}

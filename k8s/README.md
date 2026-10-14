@@ -10,6 +10,7 @@ The manifests reference locally-built images, not a registry:
 docker build -t customer-service:local ./customer-service
 docker build -t vehicle-service:local ./vehicle-service
 docker build -t identity-service:local ./identity-service
+docker build -t scheduler-service:local ./scheduler-service
 docker build -t billing-service:local ./billing-service
 docker build -t service-bay-postgres:local ./postgres
 ```
@@ -17,7 +18,7 @@ docker build -t service-bay-postgres:local ./postgres
 Load them into your cluster (kind example — minikube uses `minikube image load`):
 
 ```sh
-kind load docker-image customer-service:local vehicle-service:local identity-service:local billing-service:local service-bay-postgres:local
+kind load docker-image customer-service:local vehicle-service:local identity-service:local scheduler-service:local billing-service:local service-bay-postgres:local
 ```
 
 ## Apply
@@ -26,7 +27,7 @@ kind load docker-image customer-service:local vehicle-service:local identity-ser
 kubectl apply -k k8s/
 ```
 
-The postgres image only creates the databases. identity-, customer- and vehicle-service apply their migrations when they start, and with two or more replicas an advisory lock makes them take turns. For the dev seed data, run this once the services are up:
+The postgres image only creates the databases. identity-, customer-, vehicle- and scheduler-service apply their migrations when they start, and with two or more replicas an advisory lock makes them take turns. For the dev seed data, run this once the services are up:
 
 ```sh
 kubectl -n service-bay exec postgres-0 -- sh /seed/seed.sh
@@ -99,6 +100,7 @@ NodePort services are exposed on the cluster node's IP:
 - customer-service: 30080
 - vehicle-service: 30081
 - identity-service: 30083
+- scheduler-service: 30085
 - prometheus: 30090
 - grafana: 30030 (admin/admin)
 - flink web UI: 30082

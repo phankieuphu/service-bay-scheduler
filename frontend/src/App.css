@@ -865,3 +865,93 @@ p.flush {
 .warranty-text {
   font-size: 14px;
 }
+
+/* ---------- booking ---------- */
+
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.choice-list legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.choice.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.choice input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.choice-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.choice-price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+}
+
+.slot-grid .slot {
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.slot-grid .slot:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.slot-grid .slot.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+.slot-grid .slot:disabled {
+  color: var(--text-muted);
+  background: var(--panel-bg);
+  text-decoration: line-through;
+  cursor: default;
+}

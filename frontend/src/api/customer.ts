@@ -51,13 +51,22 @@ export function inputToBirthDay(date: string): string {
   return `${date}T00:00:00Z`
 }
 
-export function listCustomers(cursor = 0, limit = 20): Promise<CustomerPage> {
+// email, when set, narrows the list to customers whose email contains it
+// (case-insensitive).
+export function listCustomers(cursor = 0, limit = 20, email = ''): Promise<CustomerPage> {
   const params = new URLSearchParams({ cursor: String(cursor), limit: String(limit) })
+  if (email) params.set('email', email)
   return authorizedRequest(`${BASE_URL}/customer?${params}`)
 }
 
 export function getCustomer(customerId: number): Promise<Customer> {
   return authorizedRequest(`${BASE_URL}/customer/${customerId}`)
+}
+
+// The customer profile linked to the signed-in user. 404 until
+// customer-service has linked one, a few seconds after sign-up.
+export function getMyProfile(): Promise<Customer> {
+  return authorizedRequest(`${BASE_URL}/customer/me`)
 }
 
 export function createCustomer(payload: CreateCustomerPayload): Promise<Customer> {

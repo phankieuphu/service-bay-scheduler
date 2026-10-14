@@ -5,10 +5,12 @@ import "customer-service/internal/domain/entity"
 // ListCustomersParams is a cursor-based pagination request. Cursor is the ID
 // of the last customer the caller has already seen (0 to start from the
 // beginning); results are ordered by ID ascending and only IDs greater than
-// Cursor are returned.
+// Cursor are returned. Email, when set, narrows the listing to customers
+// whose email contains it (case-insensitive).
 type ListCustomersParams struct {
 	Cursor int64
 	Limit  int
+	Email  string
 }
 
 // CustomerPage is a single page of a cursor-paginated customer listing.

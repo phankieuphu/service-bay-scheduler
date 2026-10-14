@@ -83,7 +83,7 @@ func CustomerApplication(ctx context.Context) {
 	workers.Go(func() { outboxRelay.Start(workerCtx) })
 
 	// Kafka consumer
-	userEvents := handler.RegisterConsumer(cfg.Kafka.ConsumerTopic)
+	userEvents := handler.RegisterConsumer(cfg.Kafka.ConsumerTopic, entryCustomerService)
 	kafkaConsumer, err := kafka.NewConsumer(cfg.Kafka, userEvents.NewMessageHandler())
 	if err != nil {
 		logger.Fatal("failed to init Kafka consumer", "error", err)

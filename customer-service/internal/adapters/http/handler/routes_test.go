@@ -80,3 +80,30 @@ func TestRoutes_RequireStaff(t *testing.T) {
 		}
 	}
 }
+
+func TestRoutes_MyProfileOpenToEveryRole(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(gin.Recovery())
+	NewCustomerHandler(panicService{}).RegisterRoutes(r.Group("/api/v1", middleware.RequireAuth(roleTokens{})))
+
+	for _, token := range []string{"", "CUSTOMER", "TECHNICIAN", "MANAGER", "ADMIN"} {
+		t.Run(token, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/customer/me", nil)
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			switch {
+			case token == "":
+				if w.Code != http.StatusUnauthorized {
+					t.Errorf("code = %d, want 401", w.Code)
+				}
+			case w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden:
+				t.Errorf("code = %d, want the request to reach the handler", w.Code)
+			}
+		})
+	}
+}

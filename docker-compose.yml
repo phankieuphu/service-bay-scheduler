@@ -8,7 +8,7 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_started
     environment:
@@ -47,7 +47,7 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_started
     environment:
@@ -86,7 +86,7 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_started
     environment:
@@ -123,6 +123,42 @@ services:
     networks:
       - backend
 
+  scheduler-service:
+    build:
+      context: ./scheduler-service
+      dockerfile: Dockerfile
+    container_name: scheduler-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: scheduler_db
+      DB_SSLMODE: disable
+      API_PORT: 8085
+      KAFKA_BROKERS: kafka:29092
+      # Booking checks the caller's profile and vehicles with these,
+      # forwarding the caller's own access token.
+      CUSTOMER_API_URL: http://customer-service:8080/api/v1
+      VEHICLE_API_URL: http://vehicle-service:8081/api/v1
+      # Must match identity-service's: access tokens are verified with it.
+      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    ports:
+      - "8085:8085"
+    networks:
+      - backend
+
   billing-service:
     build:
       context: ./billing-service
@@ -132,7 +168,7 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -173,7 +209,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -219,7 +255,13 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server kafka:29092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
     volumes:
       - kafka_data:/var/lib/kafka/data
     networks:

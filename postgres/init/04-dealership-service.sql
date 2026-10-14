@@ -49,7 +49,7 @@ CREATE TABLE service_bay (
     UNIQUE (dealership_id, code)
 );
 -- Who is using a bay right now is derived from scheduler_db's
--- appointment_bay — see 05-scheduler-service.sql's note on
+-- appointment_bay — see scheduler-service/migrations/00001_baseline.sql's note on
 -- v_appointment_bay_usage for why that view can no longer live here.
 
 CREATE INDEX idx_service_bay_dealership ON service_bay(dealership_id);
