@@ -9,6 +9,7 @@ import (
 	"scheduler-service/internal/constants"
 	"scheduler-service/internal/domain/entity"
 	"scheduler-service/internal/domain/ports"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -40,9 +41,13 @@ func NewAppointmentRepository(db *gorm.DB) ports.AppointmentRepository {
 
 // LockVehicle implements [ports.AppointmentRepository]. It takes a
 // transaction-scoped advisory lock, so it must run inside RunInTx.
+//
+// The id goes in as a string: with `?::text` pgx plans a text parameter and
+// refuses to encode an int64 into it ("cannot find encode plan"), which
+// failed every booking.
 func (r AppointmentRepository) LockVehicle(ctx context.Context, vehicleID int64) error {
 	return database_provider.DBFromContext(ctx, r.db).
-		Exec("SELECT pg_advisory_xact_lock(?, hashtext(?::text))", vehicleLockNamespace, vehicleID).Error
+		Exec("SELECT pg_advisory_xact_lock(?, hashtext(?::text))", vehicleLockNamespace, strconv.FormatInt(vehicleID, 10)).Error
 }
 
 // VehicleBusy implements [ports.AppointmentRepository].
