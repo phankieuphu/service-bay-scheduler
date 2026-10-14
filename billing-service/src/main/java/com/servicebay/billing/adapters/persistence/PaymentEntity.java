@@ -52,6 +52,15 @@ class PaymentEntity {
     @Column(name = "failure_code", length = 100)
     String failureCode;
 
+    @Column(name = "failure_message", length = 500)
+    String failureMessage;
+
+    @Column(name = "card_brand", length = 30)
+    String cardBrand;
+
+    @Column(name = "card_last4", length = 4)
+    String cardLast4;
+
     @Column(name = "succeeded_at")
     Instant succeededAt;
 

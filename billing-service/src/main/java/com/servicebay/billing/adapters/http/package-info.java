@@ -1,2 +1,2 @@
-/** Inbound HTTP adapter: controllers and DTOs that call the domain's service ports. */
+/** The HTTP API: billing endpoints under /api/v1 (JWT) and the Stripe webhook. */
 package com.servicebay.billing.adapters.http;

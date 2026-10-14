@@ -70,6 +70,12 @@ class JpaBillRepository implements BillRepository {
         return bills.findByCustomerIdOrderByCreatedAtDesc(customerId).stream().map(this::toDomain).toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<Bill> findByCustomer(long customerId, Long beforeId, int limit) {
+        return bills.findPageByCustomer(customerId, beforeId, limit).stream().map(this::toDomain).toList();
+    }
+
     private Bill toDomain(BillEntity e) {
         List<BillLine> billLines = lines.findByBillIdOrderById(e.id).stream()
                 .map(l -> new BillLine(l.id, l.kind, l.sourceId, l.name, l.quantity, Money.of(l.unitPriceMinor, e.currency)))

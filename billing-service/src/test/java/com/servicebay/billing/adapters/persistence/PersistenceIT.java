@@ -116,7 +116,8 @@ class PersistenceIT {
         assertThat(deposit.status()).isEqualTo(PaymentStatus.REQUIRES_PAYMENT);
 
         Payment succeeded = payments.save(new Payment(deposit.id(), bill.id(), deposit.type(), deposit.amount(),
-                PaymentStatus.SUCCEEDED, "pi_" + bill.id(), deposit.idempotencyKey(), null, Instant.now(), deposit.version()));
+                PaymentStatus.SUCCEEDED, "pi_" + bill.id(), deposit.idempotencyKey(), null, null, "visa", "4242",
+                Instant.now(), deposit.version()));
         refunds.save(new Refund(null, succeeded.id(), Money.of(1_000, "USD"), "re_" + bill.id(), RefundStatus.SUCCEEDED, "goodwill", 0));
 
         assertThat(payments.findByStripePaymentIntentId("pi_" + bill.id())).isPresent();
