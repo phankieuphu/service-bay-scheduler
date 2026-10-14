@@ -2,9 +2,1404 @@
   "info": {
     "name": "Service Bay",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "All HTTP APIs for Service Bay. Run Identity > Register/Login first; create/register requests store IDs (customerId, vehicleId, billId) into collection variables for later requests."
+    "description": "All HTTP APIs for Service Bay. 'Full flow' runs one booking from sign-up to a paid bill with assertions (postman/README.md). In the per-service folders, run Identity > Register/Login first; create/register requests store ids into collection variables."
   },
   "item": [
+    {
+      "name": "Full flow",
+      "description": "Sign-up \u2192 booking \u2192 deposit \u2192 completion \u2192 priced bill \u2192 balance paid. Run in order.",
+      "item": [
+        {
+          "name": "1. Accounts",
+          "item": [
+            {
+              "name": "1.01 Staff login (bootstrap admin)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/v1/auth/login",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('staffToken', pm.response.json().access_token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.02 Register a customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/v1/auth/register",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "register"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"role\": \"CUSTOMER\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('flowEmail', `flow.${Date.now()}@example.com`);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.03 Customer login",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/v1/auth/login",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('customerToken', pm.response.json().access_token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.04 Wait for the customer profile",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{customerUrl}}/api/v1/customer/me",
+                  "host": [
+                    "{{customerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customer",
+                    "me"
+                  ]
+                },
+                "description": "customer-service creates it from identity's UserCreated event, a moment after sign-up.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const attempts = Number(pm.collectionVariables.get('pollAttempts') || 0);",
+                      "const j = pm.response.code === 200 ? pm.response.json() : null;",
+                      "if (!(j && (j.id > 0)) && attempts < 60) {",
+                      "  pm.collectionVariables.set('pollAttempts', attempts + 1);",
+                      "  setTimeout(() => {}, 1000);",
+                      "  pm.execution.setNextRequest(pm.info.requestName);",
+                      "  return;",
+                      "}",
+                      "pm.collectionVariables.set('pollAttempts', 0);",
+                      "pm.test('settled', () => pm.expect(j && (j.id > 0)).to.be.true);",
+                      "pm.collectionVariables.set('flowCustomerId', j.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.05 Register a vehicle (warranty expired)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{vehicleUrl}}/api/v1/vehicle",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "vehicle"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"vin\": \"{{randomVin}}\",\n  \"vehicle_model_id\": 1,\n  \"warranty_end_date\": \"2025-01-01T00:00:00Z\",\n  \"status\": \"ACTIVE\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{staffToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const c = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';",
+                      "let v = ''; for (let i = 0; i < 17; i++) v += c[Math.floor(Math.random() * c.length)];",
+                      "pm.collectionVariables.set('randomVin', v);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('flowVehicleId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.06 Assign it to the customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{vehicleUrl}}/api/v1/vehicle/{{flowVehicleId}}/owner",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "vehicle",
+                    "{{flowVehicleId}}",
+                    "owner"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customer_id\": {{flowCustomerId}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{staffToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 204', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "2. Booking and deposit",
+          "item": [
+            {
+              "name": "2.01 Hubs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{schedulerUrl}}/api/v1/hubs",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "hubs"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const hub = pm.response.json().hubs[0];",
+                      "pm.collectionVariables.set('hubId', hub.id);",
+                      "pm.collectionVariables.set('hubTz', hub.timezone);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.02 Free slots tomorrow",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{schedulerUrl}}/api/v1/hubs/{{hubId}}/availability?date={{bookDate}}&service_id=1&service_id=3",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "hubs",
+                    "{{hubId}}",
+                    "availability"
+                  ],
+                  "query": [
+                    {
+                      "key": "date",
+                      "value": "{{bookDate}}",
+                      "description": ""
+                    },
+                    {
+                      "key": "service_id",
+                      "value": "1",
+                      "description": ""
+                    },
+                    {
+                      "key": "service_id",
+                      "value": "3",
+                      "description": ""
+                    }
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const tz = pm.collectionVariables.get('hubTz') || 'Asia/Ho_Chi_Minh';",
+                      "pm.collectionVariables.set('bookDate', new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: tz }));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const slot = pm.response.json().slots.find(s => s.available);",
+                      "pm.test('a free slot', () => pm.expect(slot).to.exist);",
+                      "pm.collectionVariables.set('slotStart', slot.start);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.03 Book oil change + brake inspection",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{schedulerUrl}}/api/v1/appointments",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "appointments"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"hub_id\": {{hubId}},\n  \"vehicle_id\": {{flowVehicleId}},\n  \"service_ids\": [\n    1,\n    3\n  ],\n  \"start\": \"{{slotStart}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "pm.test('estimate 105.50', () => pm.expect(j.total_amount).to.eql('105.50'));",
+                      "pm.collectionVariables.set('appointmentId', j.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.04 Pay the deposit",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{depositKey}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bookings/{{appointmentId}}/deposit",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{appointmentId}}",
+                    "deposit"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('depositKey', pm.variables.replaceIn('{{$guid}}'));",
+                      "pm.collectionVariables.set('skipTo', '3.01 Staff completes the appointment');"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 503) {",
+                      "  console.warn('Stripe is not configured on billing-service: ' + pm.response.text());",
+                      "  pm.test('Stripe not configured - card steps skipped', () => true);",
+                      "  pm.collectionVariables.set('stripe', '');",
+                      "  pm.execution.setNextRequest(pm.collectionVariables.get('skipTo'));",
+                      "  return;",
+                      "}",
+                      "pm.collectionVariables.set('stripe', '1');",
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "pm.test('20% of the estimate, with a client secret', () => {",
+                      "  pm.expect(j.type).to.eql('DEPOSIT'); pm.expect(j.amount_minor).to.eql(2110); pm.expect(j.client_secret).to.be.a('string');",
+                      "});",
+                      "pm.collectionVariables.set('depositPaymentId', j.payment_id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.05 Retrying with the same key returns the same payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{depositKey}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bookings/{{appointmentId}}/deposit",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{appointmentId}}",
+                    "deposit"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('stripe')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.test('same payment', () => pm.expect(pm.response.json().payment_id).to.eql(Number(pm.collectionVariables.get('depositPaymentId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.06 A declined card",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/payments/{{depositPaymentId}}/test-confirm",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "{{depositPaymentId}}",
+                    "test-confirm"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"payment_method\": \"pm_card_chargeDeclined\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('stripe')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('still payable, with the reason', () => { pm.expect(j.status).to.eql('REQUIRES_PAYMENT'); pm.expect(j.failure_message).to.be.a('string'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.07 A good card",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/payments/{{depositPaymentId}}/test-confirm",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "{{depositPaymentId}}",
+                    "test-confirm"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"payment_method\": \"pm_card_visa\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('stripe')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('SUCCEEDED', () => pm.expect(pm.response.json().status).to.eql('SUCCEEDED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.08 The bill is open, with the deposit on it",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bookings/{{appointmentId}}/bill",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{appointmentId}}",
+                    "bill"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('stripe')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('OPEN, not priced, 21.10 paid', () => {",
+                      "  pm.expect(j.status).to.eql('OPEN'); pm.expect(j.balance_due_minor).to.be.null; pm.expect(j.amount_paid_minor).to.eql(2110);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "3. Completion and pricing",
+          "item": [
+            {
+              "name": "3.01 Staff completes the appointment",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{schedulerUrl}}/api/v1/appointments/{{appointmentId}}/complete",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "appointments",
+                    "{{appointmentId}}",
+                    "complete"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{staffToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('COMPLETED', () => pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.02 A customer can't complete",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{schedulerUrl}}/api/v1/appointments/{{appointmentId}}/complete",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "appointments",
+                    "{{appointmentId}}",
+                    "complete"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 403', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.03 Wait for the priced bill",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bookings/{{appointmentId}}/bill",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "{{appointmentId}}",
+                    "bill"
+                  ]
+                },
+                "description": "billing prices it from ServiceCompleted: scheduler's outbox relay, then billing's consumer.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const attempts = Number(pm.collectionVariables.get('pollAttempts') || 0);",
+                      "const j = pm.response.code === 200 ? pm.response.json() : null;",
+                      "if (!(j && (j.status !== 'OPEN')) && attempts < 60) {",
+                      "  pm.collectionVariables.set('pollAttempts', attempts + 1);",
+                      "  setTimeout(() => {}, 1000);",
+                      "  pm.execution.setNextRequest(pm.info.requestName);",
+                      "  return;",
+                      "}",
+                      "pm.collectionVariables.set('pollAttempts', 0);",
+                      "pm.test('settled', () => pm.expect(j && (j.status !== 'OPEN')).to.be.true);",
+                      "pm.test('warranty fee (expired) + both services', () => {",
+                      "  pm.expect(j.lines.map(l => l.kind)).to.eql(['WARRANTY_FEE', 'SERVICE', 'SERVICE']);",
+                      "  pm.expect(j.total_minor).to.eql(15550);",
+                      "});",
+                      "const paid = pm.collectionVariables.get('stripe') ? 2110 : 0;",
+                      "pm.test('the deposit counts toward it', () => pm.expect(j.balance_due_minor).to.eql(15550 - paid));",
+                      "pm.collectionVariables.set('billId', j.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.04 Staff can read it",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{staffToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.05 Without a token: 401",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 401', () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.06 It's in the vehicle's service history",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{vehicleUrl}}/api/v1/vehicle/{{flowVehicleId}}/history",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "vehicle",
+                    "{{flowVehicleId}}",
+                    "history"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{staffToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const attempts = Number(pm.collectionVariables.get('pollAttempts') || 0);",
+                      "const j = pm.response.code === 200 ? pm.response.json() : null;",
+                      "if (!(j && (j.history.some(e => e.appointment_id === Number(pm.collectionVariables.get('appointmentId'))))) && attempts < 60) {",
+                      "  pm.collectionVariables.set('pollAttempts', attempts + 1);",
+                      "  setTimeout(() => {}, 1000);",
+                      "  pm.execution.setNextRequest(pm.info.requestName);",
+                      "  return;",
+                      "}",
+                      "pm.collectionVariables.set('pollAttempts', 0);",
+                      "pm.test('settled', () => pm.expect(j && (j.history.some(e => e.appointment_id === Number(pm.collectionVariables.get('appointmentId'))))).to.be.true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "4. Paying the balance",
+          "item": [
+            {
+              "name": "4.01 Start paying the balance",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('skipTo', '4.05 My bills');"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 503) {",
+                      "  console.warn('Stripe is not configured on billing-service: ' + pm.response.text());",
+                      "  pm.test('Stripe not configured - card steps skipped', () => true);",
+                      "  pm.collectionVariables.set('stripe', '');",
+                      "  pm.execution.setNextRequest(pm.collectionVariables.get('skipTo'));",
+                      "  return;",
+                      "}",
+                      "pm.collectionVariables.set('stripe', '1');",
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "const paid = 2110;",
+                      "pm.test('FINAL for the balance', () => { pm.expect(j.type).to.eql('FINAL'); pm.expect(j.amount_minor).to.eql(15550 - paid); });",
+                      "pm.collectionVariables.set('finalPaymentId', j.payment_id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.02 Pay it",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/payments/{{finalPaymentId}}/test-confirm",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "{{finalPaymentId}}",
+                    "test-confirm"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"payment_method\": \"pm_card_visa\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('stripe')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('SUCCEEDED', () => pm.expect(pm.response.json().status).to.eql('SUCCEEDED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.03 The bill is PAID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('stripe')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('PAID, nothing due', () => { pm.expect(j.status).to.eql('PAID'); pm.expect(j.balance_due_minor).to.eql(0); });",
+                      "pm.test('card shown as brand and last 4 only', () => pm.expect(j.payments.find(p => p.type === 'FINAL').card_last4).to.match(/^\\d{4}$/));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.04 Nothing left to pay",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('stripe')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.05 My bills",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/me/bills",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "me",
+                    "bills"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('this bill is listed', () => pm.expect(pm.response.json().bills.map(b => b.id)).to.include(Number(pm.collectionVariables.get('billId'))));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
     {
       "name": "Identity Service",
       "description": "identity-service (:8083). Auth + JWT issuing.",
@@ -1161,6 +2556,786 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Scheduler Service",
+      "description": "scheduler-service (:8085). Needs an access token; booking is for CUSTOMER accounts, a hub's day and completion for staff.",
+      "item": [
+        {
+          "name": "List hubs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/hubs",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "hubs"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.hubs[0].id !== undefined) pm.collectionVariables.set('hubId', j.hubs[0].id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List services",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/services",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "services"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/hubs/{{hubId}}/availability?date=2026-10-20&service_id=1&service_id=3",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "hubs",
+                "{{hubId}}",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-10-20",
+                  "description": "YYYY-MM-DD in the hub's time zone"
+                },
+                {
+                  "key": "service_id",
+                  "value": "1",
+                  "description": ""
+                },
+                {
+                  "key": "service_id",
+                  "value": "3",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Book (CUSTOMER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/appointments",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hub_id\": {{hubId}},\n  \"vehicle_id\": {{vehicleId}},\n  \"service_ids\": [\n    1,\n    3\n  ],\n  \"start\": \"2026-10-20T10:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('appointmentId', j.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My appointments (CUSTOMER)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/me/appointments",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "appointments"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cancel (CUSTOMER)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/appointments/{{appointmentId}}/cancel",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments",
+                "{{appointmentId}}",
+                "cancel"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Hub day (staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/hubs/{{hubId}}/appointments?date=2026-10-20",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "hubs",
+                "{{hubId}}",
+                "appointments"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-10-20",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Complete (staff)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{schedulerUrl}}/api/v1/appointments/{{appointmentId}}/complete",
+              "host": [
+                "{{schedulerUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "appointments",
+                "{{appointmentId}}",
+                "complete"
+              ]
+            },
+            "description": "Publishes ServiceCompleted; billing-service prices the bill from it.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ops",
+          "item": [
+            {
+              "name": "Liveness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{schedulerUrl}}/healthz",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "healthz"
+                  ]
+                },
+                "description": "Liveness probe (go-health-check).",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Readiness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{schedulerUrl}}/readyz",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "readyz"
+                  ]
+                },
+                "description": "Readiness probe: checks Postgres/Kafka/Redis dependencies.",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Prometheus metrics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{schedulerUrl}}/metrics",
+                  "host": [
+                    "{{schedulerUrl}}"
+                  ],
+                  "path": [
+                    "metrics"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Billing Service",
+      "description": "billing-service (:8084). Needs an access token. A customer sees and pays only their own bills (others answer 404); staff read every bill. Money is integer minor units plus currency.",
+      "item": [
+        {
+          "name": "Pay deposit (CUSTOMER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bookings/{{appointmentId}}/deposit",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "{{appointmentId}}",
+                "deposit"
+              ]
+            },
+            "description": "Amount = the deposit policy applied to the booking's estimate. Returns client_secret for the Payment Element. Retrying with the same Idempotency-Key returns the same payment.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.payment_id !== undefined) pm.collectionVariables.set('paymentId', j.payment_id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get booking's bill",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bookings/{{appointmentId}}/bill",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "{{appointmentId}}",
+                "bill"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('billId', j.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get bill",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "My bills (CUSTOMER)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/me/bills?limit=20",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "bills"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": ""
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "description": "next_cursor from the previous page",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Customer's bills",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/customers/{{customerId}}/bills?limit=20",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "{{customerId}}",
+                "bills"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pay balance (CUSTOMER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}",
+                "payments"
+              ]
+            },
+            "description": "Charges the bill's current balance (the server computes it).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.payment_id !== undefined) pm.collectionVariables.set('paymentId', j.payment_id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get payment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/payments/{{paymentId}}",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{paymentId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Test-confirm (test keys only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/payments/{{paymentId}}/test-confirm",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{paymentId}}",
+                "test-confirm"
+              ]
+            },
+            "description": "pm_card_visa succeeds, pm_card_chargeDeclined is declined. 403 with a live key.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_method\": \"pm_card_visa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sync from Stripe (staff)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/payments/{{paymentId}}/sync",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{paymentId}}",
+                "sync"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ops",
+          "item": [
+            {
+              "name": "Liveness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/actuator/health/liveness",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health",
+                    "liveness"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            },
+            {
+              "name": "Readiness",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/actuator/health/readiness",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health",
+                    "readiness"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1182,6 +3357,21 @@
     {
       "key": "billingUrl",
       "value": "http://localhost:8084",
+      "type": "string"
+    },
+    {
+      "key": "schedulerUrl",
+      "value": "http://localhost:8085",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@servicebay.local",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "admin-local-dev-pass",
       "type": "string"
     },
     {
@@ -1237,6 +3427,91 @@
     {
       "key": "vehicleUpdatedAt",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "hubId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "staffToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flowEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flowCustomerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flowVehicleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "hubTz",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bookDate",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slotStart",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "depositKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "depositPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "finalPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "stripe",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "skipTo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pollAttempts",
+      "value": "0",
       "type": "string"
     }
   ]

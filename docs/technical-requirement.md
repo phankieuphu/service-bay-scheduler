@@ -25,7 +25,7 @@ The table above is the target. Current state:
 
 | Layer | Today |
 |---|---|
-| Language | Go 1.26, gin HTTP, GORM, IBM sarama for Kafka. Three services built (identity, customer, vehicle); see `architecture-design.md` §0. billing-service is scaffolded in Java 25 / Spring Boot 4 (§1b). |
+| Language | Go 1.26, gin HTTP, GORM, IBM sarama for Kafka. Four Go services built (identity, customer, vehicle, scheduler); see `architecture-design.md` §0. billing-service is Java 25 / Spring Boot 4 (§1b): Stripe payments, bills priced from `ServiceCompleted`. |
 | PostgreSQL | Postgres 16, one instance and one database per service. No replicas. |
 | Cache | Redis 7.2, single node: identity-service refresh tokens, customer list-page cache. |
 | Messaging | Kafka, single broker, replication factor 1. |

@@ -11,6 +11,15 @@ data:
   API_PORT: "8084"
   KAFKA_BROKERS: kafka:9092
   DB_MAX_OPEN_CONNS: "10"
+  CUSTOMER_API_URL: http://customer-service:8080/api/v1
+  VEHICLE_API_URL: http://vehicle-service:8081/api/v1
+  SCHEDULER_API_URL: http://scheduler-service:8085/api/v1
+  # Must match scheduler-service's CATALOG_CURRENCY.
+  BILLING_CURRENCY: USD
+  # Placeholders until business-requirement §10 #5 and #6 are decided.
+  BILLING_WARRANTY_FEE: "50.00"
+  DEPOSIT_POLICY: PERCENT
+  DEPOSIT_VALUE: "20"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -69,6 +78,26 @@ spec:
                 secretKeyRef:
                   name: postgres-credentials
                   key: POSTGRES_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: identity-jwt
+                  key: JWT_SECRET
+            # Stripe test-mode keys, never committed. Create them with
+            #   kubectl -n service-bay create secret generic billing-stripe \
+            #     --from-literal=STRIPE_SECRET_KEY=sk_test_... \
+            #     --from-literal=STRIPE_PUBLISHABLE_KEY=pk_test_... \
+            #     --from-literal=STRIPE_WEBHOOK_SECRET=whsec_...
+            # Optional: without it the pod starts and payment endpoints answer 503.
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: billing-stripe, key: STRIPE_SECRET_KEY, optional: true }
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef: { name: billing-stripe, key: STRIPE_PUBLISHABLE_KEY, optional: true }
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef: { name: billing-stripe, key: STRIPE_WEBHOOK_SECRET, optional: true }
           # The heap is 75% of the memory limit (-XX:MaxRAMPercentage=75 in
           # the image). The JVM's CPU burst at startup is why the CPU limit is
           # well above the request.
