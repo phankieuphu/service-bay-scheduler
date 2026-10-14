@@ -120,3 +120,21 @@ export function formatDate(value: string, timeZone: string): string {
 export function todayIn(timeZone: string): string {
   return new Date().toLocaleDateString('en-CA', { timeZone })
 }
+
+export interface HubDay {
+  hub_id: number
+  date: string
+  timezone: string
+  appointments: Appointment[]
+}
+
+// Staff only: a hub's appointments on one local day, earliest first.
+export function listHubDay(hubId: number, date: string): Promise<HubDay> {
+  return authorizedRequest(`${BASE_URL}/hubs/${hubId}/appointments?date=${encodeURIComponent(date)}`)
+}
+
+// Staff only: marks the work done. scheduler publishes ServiceCompleted and
+// billing-service prices the bill from it a moment later.
+export function completeAppointment(appointmentId: number): Promise<Appointment> {
+  return authorizedRequest(`${BASE_URL}/appointments/${appointmentId}/complete`, { method: 'POST' })
+}
