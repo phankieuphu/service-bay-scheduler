@@ -16,7 +16,7 @@ Last updated: 2026-09-29.
 | **customer-service** (`:8080`) | Implemented | Customer CRUD with cursor pagination, optimistic locking on update, soft delete. Publishes to `customer.events`; consumes `identity.user-events`. |
 | **vehicle-service** (`:8081`) | Implemented | Register, search (VIN / plate), update status and warranty, assign owner, transfer ownership (row-locked), list a customer's vehicles, warranty / materials / service-history reads. Publishes `vehicle.*` events. |
 | **frontend** (`:5173`) | Implemented | React 19 + Vite app: sign in / sign up, customer list and detail, vehicle search, register, detail, ownership and records. |
-| Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Flink, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
+| Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
 | Load tests | Implemented | k6 and curl scenarios (smoke, baseline, load, stress, spike, soak) in [loadtest/](loadtest/). |
 | dealership, scheduler, billing, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
 
@@ -131,7 +131,6 @@ This runs all three services and every piece of infrastructure. You only need Do
 | http://localhost:8081/api/v1 | vehicle-service |
 | http://localhost:3000 | Grafana (`admin` / `admin`) |
 | http://localhost:9090 | Prometheus |
-| http://localhost:8082 | Flink web UI |
 | http://localhost:12345 | Alloy debug UI |
 | `localhost:5432` | Postgres (`postgres` / `postgres`) |
 | `localhost:9092` | Kafka |
@@ -272,7 +271,6 @@ kubectl get pods -n service-bay -w
 | identity-service | 8083         | 30083    |
 | prometheus       | 9090         | 30090    |
 | grafana          | 3000         | 30030    |
-| flink (web UI)   | 8081         | 30082    |
 
 Docker Desktop's Kubernetes (kind-based) does **not** expose NodePorts on `localhost`, so use port-forward, one terminal each:
 
@@ -282,7 +280,6 @@ kubectl port-forward -n service-bay svc/vehicle-service  8081:8081
 kubectl port-forward -n service-bay svc/identity-service 8083:8083
 kubectl port-forward -n service-bay svc/grafana          3000:3000   # admin/admin
 kubectl port-forward -n service-bay svc/prometheus       9090:9090
-kubectl port-forward -n service-bay svc/flink-jobmanager 8082:8081
 kubectl port-forward -n service-bay svc/alloy            12345:12345 # optional: log collector debug UI
 ```
 
@@ -331,7 +328,7 @@ kubectl describe pod -n service-bay <pod>
 
 | What | Tool | Where it comes from |
 |------|------|---------------------|
-| Metrics | Prometheus → Grafana | Services and Flink expose `/metrics`; Postgres and Kafka go through exporters (`postgres-exporter` sidecar on :9187, `kafka-exporter` on :9308). Compose uses static targets ([prometheus/prometheus.yml](prometheus/prometheus.yml)); k8s discovers every pod annotated `prometheus.io/scrape: "true"` + `prometheus.io/port` ([k8s/base/prometheus/configmap.yaml](k8s/base/prometheus/configmap.yaml)), so each replica is scraped on its own |
+| Metrics | Prometheus → Grafana | Services expose `/metrics`; Postgres and Kafka go through exporters (`postgres-exporter` sidecar on :9187, `kafka-exporter` on :9308). Compose uses static targets ([prometheus/prometheus.yml](prometheus/prometheus.yml)); k8s discovers every pod annotated `prometheus.io/scrape: "true"` + `prometheus.io/port` ([k8s/base/prometheus/configmap.yaml](k8s/base/prometheus/configmap.yaml)), so each replica is scraped on its own |
 | Logs | Loki → Grafana | [Grafana Alloy](https://grafana.com/docs/alloy/) collects the stdout/stderr of every container or pod and pushes it to Loki |
 
 Grafana is at http://localhost:3000 (`admin` / `admin`). With Docker Compose it's there directly. On k8s, port-forward first (see step 5 above). The Prometheus and Loki datasources are provisioned automatically, and so are these dashboards from [k8s/base/grafana/dashboards/](k8s/base/grafana/dashboards) (the single source for both setups; compose mounts the directory, k8s ships it as the `grafana-dashboards` ConfigMap):

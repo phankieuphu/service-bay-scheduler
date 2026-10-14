@@ -149,38 +149,6 @@ services:
     networks:
       - backend
 
-  flink-jobmanager:
-    image: flink:2.3-java17
-    container_name: flink-jobmanager
-    command: jobmanager
-    depends_on:
-      kafka:
-        condition: service_started
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
-        metrics.reporter.prom.port: 9249
-    ports:
-      - "8082:8081"
-    networks:
-      - backend
-
-  flink-taskmanager:
-    image: flink:2.3-java17
-    container_name: flink-taskmanager
-    command: taskmanager
-    depends_on:
-      - flink-jobmanager
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 2
-        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
-        metrics.reporter.prom.port: 9249
-    networks:
-      - backend
-
   # Metrics exporters for the stateful infra (scraped by prometheus/prometheus.yml).
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0

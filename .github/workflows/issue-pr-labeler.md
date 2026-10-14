@@ -77,7 +77,7 @@ Only **add** labels that are missing. Never remove labels a human applied, excep
 | `area: vehicle-service` | `vehicle-service/**` |
 | `area: identity-service` | `identity-service/**`, auth, login, JWT, refresh tokens |
 | `area: frontend` | `frontend/**` |
-| `area: kafka` | `*/internal/adapters/kafka/**`, `*/internal/constants/topics.go`, outbox, event envelope/contracts, Flink |
+| `area: kafka` | `*/internal/adapters/kafka/**`, `*/internal/constants/topics.go`, outbox, event envelope/contracts |
 | `area: infra` | `docker-compose.yml`, `Dockerfile`, `Makefile`, `k8s/**`, `postgres/**`, Railway/Vercel config |
 | `area: observability` | `prometheus/**`, `grafana/**`, `loki/**`, `alloy/**`, `loadtest/**`, `*/internal/adapters/metrics/**` |
 | `area: ci` | `.github/**` |

@@ -58,7 +58,7 @@ It only **adds** labels. It never removes a label someone applied by hand. The o
 | `area: vehicle-service` | `vehicle-service/**` |
 | `area: identity-service` | `identity-service/**`, auth, JWT, refresh tokens |
 | `area: frontend` | `frontend/**` |
-| `area: kafka` | `*/internal/adapters/kafka/**`, `*/internal/constants/topics.go`, outbox, event envelope, Flink |
+| `area: kafka` | `*/internal/adapters/kafka/**`, `*/internal/constants/topics.go`, outbox, event envelope |
 | `area: infra` | `docker-compose.yml`, `Dockerfile`, `Makefile`, `k8s/**`, `postgres/**`, Railway/Vercel config |
 | `area: observability` | `prometheus/**`, `grafana/**`, `loki/**`, `alloy/**`, `loadtest/**`, `*/internal/adapters/metrics/**` |
 | `area: ci` | `.github/**` |

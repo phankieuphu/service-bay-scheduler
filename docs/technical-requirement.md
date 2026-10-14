@@ -32,7 +32,7 @@ The table above is the target. Current state:
 | Connection pooling | PgBouncer only in the `k8s/overlays/tier-1m` overlay; other setups connect directly with a per-pod `DB_MAX_OPEN_CONNS`. |
 | Deployment | Docker Compose, and Kubernetes via Kustomize (`k8s/base` plus tier overlays with HPAs). |
 | Gateway | Not built. The frontend calls the services directly. |
-| Observability | Prometheus metrics (services, Postgres and Kafka exporters, Flink) and Grafana dashboards; structured JSON logs (slog) shipped by Grafana Alloy to Loki. No OpenTelemetry tracing yet. |
+| Observability | Prometheus metrics (services, Postgres and Kafka exporters) and Grafana dashboards; structured JSON logs (slog) shipped by Grafana Alloy to Loki. No OpenTelemetry tracing yet. |
 | Load testing | k6 and sh scenarios in `loadtest/` (smoke, baseline, load, stress, spike, soak). |
 
 None of the HA mechanisms in §4 (replicas, failover, RF 3 Kafka, multi-AZ) are in place yet, and neither are the idempotency keys in §7. The one idempotent consumer so far is vehicle-service's `ServiceCompleted` handler, which ignores a duplicate `appointment_id`.

@@ -424,7 +424,7 @@ flowchart LR
 | core | `core` | Conformed dimensions (with SCD) and fact tables from §5–§6 | dbt (incremental + snapshots) | Kimball rules from this document |
 | mart | `mart` | Business-ready tables: `mart_daily_hub_report`, `mart_monthly_revenue`, … | dbt | What reports and dashboards read |
 
-**Why Kafka Connect and not a Flink job for loading:** Debezium and the JDBC sink are ready-made connectors that need only configuration. A Flink job would be custom code to maintain for the same result. Flink (already deployed with no jobs) is kept for the **real-time phase** (§11, phase 5): live "today" numbers per hub from the CDC topics.
+**Why Kafka Connect and not a Flink job for loading:** Debezium and the JDBC sink are ready-made connectors that need only configuration. A Flink job would be custom code to maintain for the same result. Flink is only needed for the **real-time phase** (§11, phase 5): live "today" numbers per hub from the CDC topics. It is not deployed; add it back to Compose and `k8s/` when that phase starts.
 
 **Schedule:** dbt runs **hourly** for staging and core, and **once per hub-day close** (after the last hub closes, around 19:00 local time) for the daily snapshots and `mart_daily_hub_report`. Data freshness target: ≤ 1 hour for core, by 20:00 local time for the daily report.
 

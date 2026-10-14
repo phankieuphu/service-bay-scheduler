@@ -20,7 +20,6 @@ Most of this document is the **target** design. §0 says how much of it is built
 | Ids (§5a) | Partly as designed. identity-service mints UUIDs; customer-service and vehicle-service still use `BIGINT` identity keys, and cross-service references (`customer_vehicle.customer_id`, `vehicle_material.material_id`, …) are `BIGINT` too. Customer profiles don't store the identity `user_id` yet. |
 | Redis (§7) | Used for identity-service refresh tokens and a 30 s cache of customer list pages. No availability cache yet (no scheduler-service). |
 | Kafka (§3, §7) | One broker (KRaft in Docker Compose, ZooKeeper in `k8s/`), auto-created topics. |
-| Flink | Deployed in Compose and `k8s/`, but no jobs yet. |
 | Data warehouse (§9) | Designed in `data-warehouse-design.md` (Kimball, CDC with Debezium, dbt). Not built. |
 
 ---
