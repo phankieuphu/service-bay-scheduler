@@ -6,14 +6,16 @@ Most of this document is the **target** design. §0 says how much of it is built
 
 ---
 
-## 0. Implementation status (2026-09-29)
+## 0. Implementation status (2026-10-15)
 
 | Part of the design | Status |
 |---|---|
 | identity-service | Built: register, login, refresh, logout, `GET /me`. Publishes `UserCreated` (§3a). |
 | customer-service | Built: customer CRUD, cursor pagination, optimistic locking, soft delete. Publishes the §3c events. Consumes `identity.user-events` but only logs them for now. |
 | vehicle-service | Built: registry, owner assign/transfer, warranty, installed materials, service history. Produces and consumes the §3b events. Consumes `identity.user-events` but only logs them for now. |
-| dealership, scheduler, billing, notification, report services | Not built. Each has a database and schema in `postgres/init/` (`04`–`08`), and nothing else yet. |
+| billing-service | Built (Java 21 / Spring Boot, `billing_service/`): bills, CASH payments, CARD payments through payment-service, void. Publishes `PaymentReceived` and consumes payment-service's events (§3d). Bills are created by the checkout workflow (§3d), which stands in for consuming `ServiceCompleted` until scheduler-service exists. |
+| payment-service | Built (Java 21 / Spring Boot, `payment-service/`). Not in the original map (§1): the only service that talks to Stripe. Creates PaymentIntents, verifies webhooks, publishes the §3d events. No refunds yet. |
+| dealership, scheduler, notification, report services | Not built. Each has a database and schema in `postgres/init/` (`04`, `05`, `07`, `08`), and nothing else yet. |
 | API Gateway (§2, §7) | Not built. The web app (`frontend/`) calls each service directly, and the services allow any CORS origin. Only identity-service validates tokens (`GET /me`); customer-service and vehicle-service endpoints are unauthenticated. |
 | Transactional outbox (§3) | Built in all three services: outbox row in the same transaction, relay polls every 2 s. |
 | Database per service (§5, §7) | Built: one Postgres instance, one database per service, no cross-database FKs. |
@@ -34,6 +36,7 @@ Most of this document is the **target** design. §0 says how much of it is built
 | **dealership-service** | ServiceHub, ServiceBay, Technician, Skill, TechnicianSkill, Material (inventory), ServiceCatalog (service type, required skill, duration, price) | Everything a hub manages day-to-day: capacity, staffing, stock, catalog. Runs its own consumers for skill progression and inventory decrement (see §5). |
 | **scheduler-service** | Booking/Appointment, a local capacity read-model (bay/technician/shift/skill snapshot) | Booking lifecycle: availability search, slot hold/confirm, cancellation, mid-service change requests. The only service that decides whether a slot is taken. |
 | **billing-service** | Bill, Payment, Deposit | Bill computation (warranty fee + service fees + material cost) and payment/deposit handling. |
+| **payment-service** | Gateway payment (Stripe PaymentIntent) | Card charges for billing-service's payments. Holds the Stripe keys so no other service does; billing stays the ledger of record. |
 | **notification-service** | Outbox/delivery log | Delivers booking confirmations, mid-service approval prompts, bill-ready notices — email/SMS/push. Consumes the outbox topic, doesn't originate business logic. |
 | **report-service** | Daily rollups per hub (read model) | End-of-day aggregation for Dealership Managers: revenue, completed bookings, materials consumed, technician utilization. Serves the `mart_daily_hub_report` built by the data warehouse (§9) instead of computing its own rollup. |
 
@@ -224,6 +227,52 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 | `customer.account.deleted.v1` | `CustomerDeleted` | `DELETE /customer/:id` (soft delete) | `id`, `deleted_at` |
 
 Nothing consumes these topics yet. A consumer should dedupe on `event_id` or upsert by `customer.id`.
+
+---
+
+### 3d. billing-service and payment-service contracts
+
+**Checkout** (`POST /api/v1/bills/checkout` on billing-service) is the service-completion workflow. Until scheduler-service publishes `ServiceCompleted`, a caller posts `appointmentId`, `customerId`, `vehicleId`, an optional `serviceDate` (YYYY-MM-DD, defaults to today in `BILLING_TIME_ZONE`), `services[]` and `materials[]`. Each line has `description`, `quantity` and `unitPrice`. billing-service then:
+
+1. Checks with customer-service that the customer exists and is `ACTIVE`, and with vehicle-service that the vehicle exists, is `ACTIVE` and is currently owned by that customer (`GET /api/v1/customers/{id}/vehicles`). The answer is 404 for an unknown customer or vehicle, 409 when it's not owned, inactive or already billed, and 502 when either service is down. These are write-time checks (§5a) and are never re-validated.
+2. Asks vehicle-service for the warranty status on `serviceDate`, and adds the warranty/expiration fee (`BILLING_WARRANTY_FEE`) only if the warranty has expired or there is none (business-requirement.md §6).
+3. Writes the bill and its itemized `bill_line` rows in one transaction. `GET /api/v1/bills/{id}/lines` returns the lines.
+
+Card flow:
+
+Card flow. The browser never sends an amount to payment-service; it only gets a Stripe client secret.
+
+1. `POST /api/v1/bills/{id}/payments` on billing-service (`{"type":"FINAL","method":"CARD","amount":140.00}`) reserves the amount as a `PENDING` payment, under the bill's row lock. A pending card payment counts against the outstanding balance, so concurrent checkouts can't overpay.
+2. billing-service calls payment-service's internal `POST /api/v1/payments` (`billId`, `billingPaymentId`, `customerId`, `amount`, `currency`). payment-service creates a Stripe PaymentIntent with the idempotency key `service-bay-payment-<id>` and metadata `payment_id` / `bill_id`, and returns `clientSecret`. A retry for the same `billingPaymentId` returns the same intent. If the call fails, billing marks the payment `FAILED` and answers 502.
+3. The browser confirms with Stripe.js (`stripe.confirmPayment` with the `clientSecret`). This is not built in `frontend/` yet. With test-mode keys, `POST /api/v1/payments/{id}/test-confirm` on payment-service confirms with a Stripe test card instead (the Postman *Full flow* uses it). `POST /api/v1/payments/{id}/sync` re-reads an intent from Stripe when a webhook was missed.
+4. Stripe calls `POST /api/v1/webhooks/stripe` on payment-service. The signature is verified with `STRIPE_WEBHOOK_SECRET`, and the event id is deduped in `stripe_event` in the same transaction as the state change. `payment_intent.payment_failed` only records the reason, because the customer can retry on the same intent. `succeeded` and `canceled` are terminal and are published via the outbox.
+5. billing-service consumes the event, settles the payment, updates `bill.status` and publishes `PaymentReceived`.
+
+`POST /api/v1/bills/{id}/payments/{paymentId}/cancel` abandons an unpaid card payment. It cancels the intent first; if Stripe already charged the card, the answer is 409. CASH payments skip payment-service and are `SUCCEEDED` (and published) immediately.
+
+**Produced by payment-service** (outbox; key = bill id; payload under `payment`; `amount` is a decimal **string**):
+
+```json
+{
+  "event_id": "7b7ce26d-03de-4593-a3df-6421b91a5671",
+  "event_type": "PaymentSucceeded",
+  "occurred_at": "2026-10-14T18:51:04.314928Z",
+  "payment": {
+    "id": 1, "bill_id": 1, "billing_payment_id": 2, "customer_id": 42,
+    "amount": "140.00", "currency": "usd", "status": "SUCCEEDED",
+    "stripe_payment_intent_id": "pi_3Q...", "failure_reason": null
+  }
+}
+```
+
+| Topic | `event_type` | When |
+|---|---|---|
+| `payment.payment.succeeded.v1` | `PaymentSucceeded` | Stripe `payment_intent.succeeded` |
+| `payment.payment.failed.v1` | `PaymentFailed` | Intent canceled (by billing's cancel call or in Stripe); `failure_reason` says why. A declined card attempt is **not** published. |
+
+**Produced by billing-service** (outbox; key = bill id): `billing.payment.received.v1` / `PaymentReceived`. It is published for every successful payment, CASH or CARD. Fields under `payment`: `id`, `bill_id`, `appointment_id`, `customer_id`, `vehicle_id`, `type` (`DEPOSIT`|`FINAL`), `method` (`CASH`|`CARD`), `amount`, `bill_total_amount` (both 2-decimal strings), `bill_status` after this payment, `paid_at`. This is the event §3 assigns to scheduler (unblocking deposit-gated bookings), notification and report. Nothing consumes it yet.
+
+Consumers dedupe by state. billing ignores a `PaymentSucceeded` for a payment that is already `SUCCEEDED`. If a success arrives for a payment billing had already marked `FAILED`, billing still records it and logs an error, because the money was taken.
 
 ---
 

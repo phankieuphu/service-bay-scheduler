@@ -94,6 +94,71 @@ services:
     networks:
       - backend
 
+  billing-service:
+    build:
+      context: ./billing_service
+      dockerfile: Dockerfile
+    container_name: billing-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      customer-service:
+        condition: service_started
+      vehicle-service:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: billing_db
+      DB_SSLMODE: disable
+      SERVER_PORT: 8084
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CONSUMER_GROUP: billing-service
+      PAYMENT_SERVICE_URL: http://payment-service:8085
+      CUSTOMER_SERVICE_URL: http://customer-service:8080
+      VEHICLE_SERVICE_URL: http://vehicle-service:8081
+      BILLING_CURRENCY: ${BILLING_CURRENCY:-usd}
+      BILLING_WARRANTY_FEE: ${BILLING_WARRANTY_FEE:-50.00}
+    ports:
+      - "8084:8084"
+    networks:
+      - backend
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: payment-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: payment_db
+      DB_SSLMODE: disable
+      SERVER_PORT: 8085
+      KAFKA_BROKERS: kafka:29092
+      # From the shell or the root .env (gitignored). Unset = card payments
+      # answer 503 and everything else still runs. Test-mode keys only here.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_API_BASE: ${STRIPE_API_BASE:-}
+    ports:
+      - "8085:8085"
+    networks:
+      - backend
+
   postgres:
     image: postgres:16
     container_name: postgres

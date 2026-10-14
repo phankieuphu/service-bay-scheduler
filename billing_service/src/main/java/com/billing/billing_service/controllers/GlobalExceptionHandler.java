@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.billing.billing_service.controllers.dto.ErrorResponse;
 import com.billing.billing_service.exceptions.ConflictException;
 import com.billing.billing_service.exceptions.NotFoundException;
+import com.billing.billing_service.exceptions.PaymentGatewayException;
+import com.billing.billing_service.exceptions.UpstreamServiceException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -23,6 +25,18 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(ConflictException.class)
   @ResponseStatus(HttpStatus.CONFLICT)
   public ErrorResponse handleConflict(ConflictException e) {
+    return new ErrorResponse(e.getMessage());
+  }
+
+  @ExceptionHandler(PaymentGatewayException.class)
+  @ResponseStatus(HttpStatus.BAD_GATEWAY)
+  public ErrorResponse handleGateway(PaymentGatewayException e) {
+    return new ErrorResponse(e.getMessage());
+  }
+
+  @ExceptionHandler(UpstreamServiceException.class)
+  @ResponseStatus(HttpStatus.BAD_GATEWAY)
+  public ErrorResponse handleUpstream(UpstreamServiceException e) {
     return new ErrorResponse(e.getMessage());
   }
 

@@ -29,8 +29,9 @@ public class PaymentEntity {
   @Column(nullable = false, length = 20)
   private PaymentType type;
 
+  @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
-  private String method;
+  private PaymentMethod method;
 
   @Column(nullable = false, precision = 12, scale = 2)
   private BigDecimal amount;
@@ -38,6 +39,13 @@ public class PaymentEntity {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private PaymentStatus status = PaymentStatus.PENDING;
+
+  // payment-service's payment id; set for CARD payments once the checkout is created.
+  @Column(name = "external_payment_id", unique = true)
+  private Long externalPaymentId;
+
+  @Column(name = "failure_reason", length = 500)
+  private String failureReason;
 
   @Column(name = "paid_at")
   private OffsetDateTime paidAt;
@@ -48,7 +56,7 @@ public class PaymentEntity {
   protected PaymentEntity() {
   }
 
-  public PaymentEntity(Long billId, PaymentType type, String method, BigDecimal amount) {
+  public PaymentEntity(Long billId, PaymentType type, PaymentMethod method, BigDecimal amount) {
     this.billId = billId;
     this.type = type;
     this.method = method;
@@ -62,7 +70,13 @@ public class PaymentEntity {
 
   public void markSucceeded() {
     this.status = PaymentStatus.SUCCEEDED;
+    this.failureReason = null;
     this.paidAt = OffsetDateTime.now();
+  }
+
+  public void markFailed(String reason) {
+    this.status = PaymentStatus.FAILED;
+    this.failureReason = reason == null || reason.length() <= 500 ? reason : reason.substring(0, 500);
   }
 
   public Long getId() {
@@ -77,8 +91,20 @@ public class PaymentEntity {
     return type;
   }
 
-  public String getMethod() {
+  public PaymentMethod getMethod() {
     return method;
+  }
+
+  public Long getExternalPaymentId() {
+    return externalPaymentId;
+  }
+
+  public void setExternalPaymentId(Long externalPaymentId) {
+    this.externalPaymentId = externalPaymentId;
+  }
+
+  public String getFailureReason() {
+    return failureReason;
   }
 
   public BigDecimal getAmount() {

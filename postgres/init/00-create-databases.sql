@@ -18,5 +18,6 @@ CREATE DATABASE vehicle_db;
 CREATE DATABASE dealership_db;
 CREATE DATABASE scheduler_db;
 CREATE DATABASE billing_db;
+CREATE DATABASE payment_db;
 CREATE DATABASE notification_db;
 CREATE DATABASE report_db;

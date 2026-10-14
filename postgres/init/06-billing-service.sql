@@ -35,19 +35,59 @@ CREATE TABLE bill (
 
 CREATE INDEX idx_bill_customer ON bill(customer_id);
 
+-- Itemized lines behind bill's three totals, written by POST
+-- /api/v1/bills/checkout in the same transaction as the bill. Copied
+-- at checkout time (Pattern c, same reason as the totals above), so a
+-- later catalog or price change never rewrites an issued bill.
+-- Bills created with plain POST /api/v1/bills have no lines.
+CREATE TABLE bill_line (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    bill_id     BIGINT NOT NULL REFERENCES bill(id) ON DELETE CASCADE,
+    kind        varchar(20) NOT NULL CHECK (kind IN ('WARRANTY_FEE','SERVICE','MATERIAL')),
+    description varchar(255) NOT NULL,
+    quantity    integer NOT NULL CHECK (quantity > 0),
+    unit_price  numeric(12,2) NOT NULL CHECK (unit_price >= 0),
+    amount      numeric(12,2) NOT NULL CHECK (amount >= 0),
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_bill_line_bill ON bill_line(bill_id);
+
 -- A deposit at booking time and the final payment are both rows
 -- here; `bill.status` reflects whatever the sum of SUCCEEDED
 -- payments covers.
+--
+-- CASH payments are SUCCEEDED as soon as they are recorded. CARD
+-- payments start PENDING and are settled by payment-service (Stripe):
+-- external_payment_id is payment-service's payment id (no FK, other
+-- database), and the row moves to SUCCEEDED/FAILED when the matching
+-- payment.payment.* event arrives. A PENDING row counts against the
+-- outstanding balance so two concurrent card checkouts can't overpay.
 CREATE TABLE payment (
-    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    bill_id    BIGINT NOT NULL REFERENCES bill(id) ON DELETE RESTRICT,
-    type       varchar(20) NOT NULL CHECK (type IN ('DEPOSIT','FINAL')),
-    method     varchar(30) NOT NULL,
-    amount     numeric(12,2) NOT NULL CHECK (amount > 0),
-    status     varchar(20) NOT NULL DEFAULT 'PENDING'
-               CHECK (status IN ('PENDING','SUCCEEDED','FAILED','REFUNDED')),
-    paid_at    timestamptz,
-    created_at timestamptz NOT NULL DEFAULT now()
+    id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    bill_id             BIGINT NOT NULL REFERENCES bill(id) ON DELETE RESTRICT,
+    type                varchar(20) NOT NULL CHECK (type IN ('DEPOSIT','FINAL')),
+    method              varchar(30) NOT NULL CHECK (method IN ('CASH','CARD')),
+    amount              numeric(12,2) NOT NULL CHECK (amount > 0),
+    status              varchar(20) NOT NULL DEFAULT 'PENDING'
+                        CHECK (status IN ('PENDING','SUCCEEDED','FAILED','REFUNDED')),
+    external_payment_id BIGINT UNIQUE,      -- owned by payment-service, no FK
+    failure_reason      varchar(500),
+    paid_at             timestamptz,
+    created_at          timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_payment_bill ON payment(bill_id);
+
+-- Transactional outbox, same shape and relay contract as the Go
+-- services (see 01-identity-service.sql). Carries PaymentReceived.
+CREATE TABLE outbox_message (
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    topic        varchar(255) NOT NULL,
+    message_key  varchar(255) NOT NULL,
+    payload      jsonb NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    published_at timestamptz
+);
+
+CREATE INDEX idx_outbox_message_unpublished ON outbox_message (id) WHERE published_at IS NULL;

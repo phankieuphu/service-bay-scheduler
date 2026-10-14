@@ -2,9 +2,1706 @@
   "info": {
     "name": "Service Bay",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "All HTTP APIs for Service Bay. Run Identity > Register/Login first; create/register requests store IDs (customerId, vehicleId, billId) into collection variables for later requests."
+    "description": "All HTTP APIs for Service Bay. 'Full flow' runs the business flows end to end with assertions (see postman/README.md). In the per-service folders, create/register requests store IDs (customerId, vehicleId, billId) into collection variables for later requests."
   },
   "item": [
+    {
+      "name": "Full flow",
+      "description": "End-to-end business flows with assertions. Run the whole folder in order with the Collection Runner or postman/run-flow.sh. Uses seeded customers/vehicles (postgres/seed). Card steps need Stripe test keys on payment-service and are skipped otherwise.",
+      "item": [
+        {
+          "name": "1. Seeded customer, no warranty: cash deposit + card balance -> PAID",
+          "item": [
+            {
+              "name": "1.01 Billing is up",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/actuator/health",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.02 Payment service is up",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{paymentUrl}}/actuator/health",
+                  "host": [
+                    "{{paymentUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.03 Get seeded customer",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{customerUrl}}/api/v1/customer/{{flowCustomerId}}",
+                  "host": [
+                    "{{customerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customer",
+                    "{{flowCustomerId}}"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('flowCustomerId', pm.collectionVariables.get('seedCustomerNoWarranty'));",
+                      "pm.collectionVariables.set('flowVehicleId', pm.collectionVariables.get('seedVehicleNoWarranty'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('customer is ACTIVE', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.04 Customer currently owns the vehicle",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{vehicleUrl}}/api/v1/customers/{{flowCustomerId}}/vehicles",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers",
+                    "{{flowCustomerId}}",
+                    "vehicles"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const ids = pm.response.json().vehicles.map(v => v.id);",
+                      "pm.test('vehicle is in the customer list', () => pm.expect(ids).to.include(Number(pm.collectionVariables.get('flowVehicleId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.05 Warranty status",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{vehicleUrl}}/api/v1/vehicle/{{flowVehicleId}}/warranty",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "vehicle",
+                    "{{flowVehicleId}}",
+                    "warranty"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('expectFee', !pm.response.json().in_warranty);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.06 Checkout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": {{flowCustomerId}},\n  \"vehicleId\": {{flowVehicleId}},\n  \"services\": [\n    {\n      \"description\": \"Periodic maintenance (10,000 km)\",\n      \"quantity\": 1,\n      \"unitPrice\": 30.0\n    },\n    {\n      \"description\": \"Brake inspection\",\n      \"quantity\": 1,\n      \"unitPrice\": 20.0\n    }\n  ],\n  \"materials\": [\n    {\n      \"description\": \"Oil filter\",\n      \"quantity\": 1,\n      \"unitPrice\": 12.5\n    },\n    {\n      \"description\": \"Engine oil 1L\",\n      \"quantity\": 4,\n      \"unitPrice\": 8.0\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('appointmentId', Date.now() % 1000000000);",
+                      "pm.collectionVariables.set('externalPaymentId', '');",
+                      "pm.collectionVariables.set('skipCardTo', '1.15 Payments are listed');"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "const expectFee = pm.collectionVariables.get('expectFee') === true || pm.collectionVariables.get('expectFee') === 'true';",
+                      "pm.test('warranty fee follows the warranty', () => pm.expect(j.warranty.feeCharged).to.eql(expectFee));",
+                      "pm.test('lines add up to the total', () => {",
+                      "  const sum = j.lines.reduce((s, l) => s + Math.round((l.amount) * 100), 0);",
+                      "  pm.expect(sum).to.eql(Math.round((j.bill.totalAmount) * 100));",
+                      "});",
+                      "pm.test('service fee = 50.00, materials = 44.50', () => {",
+                      "  pm.expect(Math.round((j.bill.serviceFee) * 100)).to.eql(5000);",
+                      "  pm.expect(Math.round((j.bill.materialCost) * 100)).to.eql(4450);",
+                      "});",
+                      "pm.test('bill is PENDING', () => pm.expect(j.bill.status).to.eql('PENDING'));",
+                      "pm.collectionVariables.set('billId', j.bill.id);",
+                      "pm.collectionVariables.set('billTotalCents', Math.round((j.bill.totalAmount) * 100));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.07 Same appointment cannot be billed twice",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": {{flowCustomerId}},\n  \"vehicleId\": {{flowVehicleId}},\n  \"services\": [\n    {\n      \"description\": \"Duplicate\",\n      \"unitPrice\": 1.0\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.08 Bill lines",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/lines",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "lines"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const kinds = pm.response.json().map(l => l.kind);",
+                      "pm.test('2 services and 2 materials', () => {",
+                      "  pm.expect(kinds.filter(k => k === 'SERVICE').length).to.eql(2);",
+                      "  pm.expect(kinds.filter(k => k === 'MATERIAL').length).to.eql(2);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.09 Cash deposit",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"DEPOSIT\",\n  \"method\": \"CASH\",\n  \"amount\": {{depositAmount}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('depositAmount', 20.00);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.test('SUCCEEDED at once', () => pm.expect(pm.response.json().status).to.eql('SUCCEEDED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.10 Bill is PARTIALLY_PAID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('PARTIALLY_PAID', () => pm.expect(pm.response.json().status).to.eql('PARTIALLY_PAID'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.11 Card checkout for the balance",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"FINAL\",\n  \"method\": \"CARD\",\n  \"amount\": {{cardAmount}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const balance = Number(pm.collectionVariables.get('billTotalCents')) - 2000;",
+                      "pm.collectionVariables.set('cardAmount', (balance / 100).toFixed(2));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 502) {",
+                      "  // payment-service has no Stripe test keys (or Stripe is unreachable): billing marked the payment FAILED.",
+                      "  console.warn('Card checkout unavailable, skipping card steps: ' + pm.response.text());",
+                      "  pm.test('card checkout unavailable (no Stripe test keys) - skipped', () => true);",
+                      "  pm.execution.setNextRequest(pm.collectionVariables.get('skipCardTo'));",
+                      "  return;",
+                      "}",
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "pm.test('PENDING with a client secret', () => { pm.expect(j.status).to.eql('PENDING'); pm.expect(j.clientSecret).to.be.a('string'); });",
+                      "pm.collectionVariables.set('billingPaymentId', j.id);",
+                      "pm.collectionVariables.set('externalPaymentId', j.externalPaymentId);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.12 Nothing left to charge while the card is pending",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"FINAL\",\n  \"method\": \"CASH\",\n  \"amount\": 1.0\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.13 Declined card attempt",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{paymentUrl}}/api/v1/payments/{{externalPaymentId}}/test-confirm",
+                  "host": [
+                    "{{paymentUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "{{externalPaymentId}}",
+                    "test-confirm"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"paymentMethod\": \"pm_card_chargeDeclined\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const j = pm.response.json();",
+                      "pm.test('still PENDING, reason recorded', () => { pm.expect(j.status).to.eql('PENDING'); pm.expect(j.failureReason).to.be.a('string'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.14 Successful card attempt",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{paymentUrl}}/api/v1/payments/{{externalPaymentId}}/test-confirm",
+                  "host": [
+                    "{{paymentUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "{{externalPaymentId}}",
+                    "test-confirm"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"paymentMethod\": \"pm_card_visa\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('SUCCEEDED', () => pm.expect(pm.response.json().status).to.eql('SUCCEEDED'));",
+                      "pm.collectionVariables.set('pollAttempts', 0);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.15 Payments are listed",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('deposit recorded', () => pm.expect(pm.response.json()[0].status).to.eql('SUCCEEDED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.16 Wait for bill PAID (Kafka round trip)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}"
+                  ]
+                },
+                "description": "billing settles the card payment from payment-service's Kafka event, so this polls for up to ~15 s. Skipped when card steps were skipped.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('externalPaymentId')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const attempts = Number(pm.collectionVariables.get('pollAttempts') || 0);",
+                      "if (pm.response.json().status !== 'PAID' && attempts < 15) {",
+                      "  pm.collectionVariables.set('pollAttempts', attempts + 1);",
+                      "  setTimeout(() => {}, 1000);",
+                      "  pm.execution.setNextRequest(pm.info.requestName);",
+                      "  return;",
+                      "}",
+                      "pm.test('bill is PAID', () => pm.expect(pm.response.json().status).to.eql('PAID'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.17 A charged card cannot be canceled",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments/{{billingPaymentId}}/cancel",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments",
+                    "{{billingPaymentId}}",
+                    "cancel"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('externalPaymentId')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.18 A paid bill cannot be voided",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/void",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "void"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!pm.collectionVariables.get('externalPaymentId')) { pm.execution.skipRequest(); }"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "2. Seeded customer in warranty: card abandoned -> bill voided",
+          "item": [
+            {
+              "name": "2.01 Checkout (warranty covers the fee)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": {{flowCustomerId}},\n  \"vehicleId\": {{flowVehicleId}},\n  \"serviceDate\": \"2026-10-15\",\n  \"services\": [\n    {\n      \"description\": \"Warranty inspection\",\n      \"quantity\": 1,\n      \"unitPrice\": 25.0\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('appointmentId', Date.now() % 1000000000);",
+                      "pm.collectionVariables.set('flowCustomerId', pm.collectionVariables.get('seedCustomerInWarranty'));",
+                      "pm.collectionVariables.set('flowVehicleId', pm.collectionVariables.get('seedVehicleInWarranty'));",
+                      "pm.collectionVariables.set('externalPaymentId', '');",
+                      "pm.collectionVariables.set('skipCardTo', '2.04 Void the bill');"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "pm.test('in warranty: no fee', () => { pm.expect(j.warranty.inWarranty).to.eql(true); pm.expect(j.warranty.feeCharged).to.eql(false); });",
+                      "pm.test('no WARRANTY_FEE line', () => pm.expect(j.lines.map(l => l.kind)).to.not.include('WARRANTY_FEE'));",
+                      "pm.collectionVariables.set('billId', j.bill.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.02 Start card checkout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"FINAL\",\n  \"method\": \"CARD\",\n  \"amount\": 25.0\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 502) {",
+                      "  // payment-service has no Stripe test keys (or Stripe is unreachable): billing marked the payment FAILED.",
+                      "  console.warn('Card checkout unavailable, skipping card steps: ' + pm.response.text());",
+                      "  pm.test('card checkout unavailable (no Stripe test keys) - skipped', () => true);",
+                      "  pm.execution.setNextRequest(pm.collectionVariables.get('skipCardTo'));",
+                      "  return;",
+                      "}",
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('billingPaymentId', pm.response.json().id);",
+                      "pm.collectionVariables.set('externalPaymentId', pm.response.json().externalPaymentId);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.03 Customer walks away: cancel the card payment",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments/{{billingPaymentId}}/cancel",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments",
+                    "{{billingPaymentId}}",
+                    "cancel"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('FAILED (canceled)', () => pm.expect(pm.response.json().status).to.eql('FAILED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.04 Void the bill",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/void",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "void"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('VOID', () => pm.expect(pm.response.json().status).to.eql('VOID'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.05 A void bill takes no payments",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"FINAL\",\n  \"method\": \"CASH\",\n  \"amount\": 25.0\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "3. New walk-in customer: register, assign owner, checkout, pay cash",
+          "item": [
+            {
+              "name": "3.01 Create customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{customerUrl}}/api/v1/customer",
+                  "host": [
+                    "{{customerUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customer"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Walk-in Customer\",\n  \"email\": \"walkin.{{$timestamp}}@example.com\",\n  \"phone\": \"+84901234567\",\n  \"birth_day\": \"1990-05-20T00:00:00Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('flowCustomerId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.02 Register vehicle (warranty already expired)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{vehicleUrl}}/api/v1/vehicle",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "vehicle"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"vin\": \"{{randomVin}}\",\n  \"vehicle_model_id\": 1,\n  \"warranty_end_date\": \"2025-01-01T00:00:00Z\",\n  \"status\": \"ACTIVE\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const c = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';",
+                      "let v = ''; for (let i = 0; i < 17; i++) v += c[Math.floor(Math.random() * c.length)];",
+                      "pm.collectionVariables.set('randomVin', v);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('flowVehicleId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.03 Checkout before ownership is rejected",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": {{flowCustomerId}},\n  \"vehicleId\": {{flowVehicleId}},\n  \"services\": [\n    {\n      \"description\": \"Oil change\",\n      \"unitPrice\": 30.0\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('appointmentId', Date.now() % 1000000000);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.04 Assign the vehicle to the customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{vehicleUrl}}/api/v1/vehicle/{{flowVehicleId}}/owner",
+                  "host": [
+                    "{{vehicleUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "vehicle",
+                    "{{flowVehicleId}}",
+                    "owner"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customer_id\": {{flowCustomerId}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('assigned', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.05 Checkout (expired warranty: fee charged)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": {{flowCustomerId}},\n  \"vehicleId\": {{flowVehicleId}},\n  \"services\": [\n    {\n      \"description\": \"Oil change\",\n      \"unitPrice\": 30.0\n    }\n  ],\n  \"materials\": [\n    {\n      \"description\": \"Engine oil 1L\",\n      \"quantity\": 4,\n      \"unitPrice\": 8.0\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const j = pm.response.json();",
+                      "pm.test('fee charged, warranty ended 2025-01-01', () => {",
+                      "  pm.expect(j.warranty.feeCharged).to.eql(true);",
+                      "  pm.expect(j.lines[0].description).to.include('warranty ended 2025-01-01');",
+                      "});",
+                      "pm.collectionVariables.set('billId', j.bill.id);",
+                      "pm.collectionVariables.set('cashAmount', j.bill.totalAmount);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.06 Pay everything in cash",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}",
+                    "payments"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"FINAL\",\n  \"method\": \"CASH\",\n  \"amount\": {{cashAmount}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.07 Bill is PAID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/{{billId}}",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "{{billId}}"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('PAID', () => pm.expect(pm.response.json().status).to.eql('PAID'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.08 Customer's bills",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills?customerId={{flowCustomerId}}",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills?customerId={{flowCustomerId}}"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('one bill', () => pm.expect(pm.response.json().length).to.eql(1));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "4. Checkout validation",
+          "item": [
+            {
+              "name": "4.01 Vehicle owned by someone else",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": \"{{seedCustomerNotOwner}}\",\n  \"vehicleId\": \"{{seedVehicleNoWarranty}}\",\n  \"services\": [\n    {\n      \"description\": \"Oil change\",\n      \"unitPrice\": 30.0\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('appointmentId', Date.now() % 1000000000);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));",
+                      "pm.test('says not owned', () => pm.expect(pm.response.json().error).to.include('not currently owned'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.02 Unknown customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": 999999999,\n  \"vehicleId\": \"{{seedVehicleNoWarranty}}\",\n  \"services\": [\n    {\n      \"description\": \"Oil change\",\n      \"unitPrice\": 30.0\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.03 No services",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": \"{{seedCustomerNoWarranty}}\",\n  \"vehicleId\": \"{{seedVehicleNoWarranty}}\",\n  \"services\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.04 Price with 3 decimals",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{billingUrl}}/api/v1/bills/checkout",
+                  "host": [
+                    "{{billingUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bills",
+                    "checkout"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": \"{{seedCustomerNoWarranty}}\",\n  \"vehicleId\": \"{{seedVehicleNoWarranty}}\",\n  \"services\": [\n    {\n      \"description\": \"Oil change\",\n      \"unitPrice\": 30.005\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
     {
       "name": "Identity Service",
       "description": "identity-service (:8083). Auth + JWT issuing.",
@@ -976,7 +2673,64 @@
       "description": "billing_service (Spring Boot, :8084).",
       "item": [
         {
-          "name": "Create bill",
+          "name": "Checkout (service completed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/checkout",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "checkout"
+              ]
+            },
+            "description": "Workflow: checks with customer-service and vehicle-service that the customer is ACTIVE, the vehicle is ACTIVE and currently owned by that customer, then adds the warranty/expiration fee only if the warranty has expired or there is none (business-requirement.md \u00a76) and issues an itemized bill. serviceDate (YYYY-MM-DD) is optional. 404 unknown customer/vehicle, 409 not owned / inactive / appointment already billed, 502 upstream down.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": {{customerId}},\n  \"vehicleId\": {{vehicleId}},\n  \"serviceDate\": null,\n  \"services\": [\n    {\n      \"description\": \"Periodic maintenance\",\n      \"quantity\": 1,\n      \"unitPrice\": 30.0\n    },\n    {\n      \"description\": \"Tire rotation\",\n      \"quantity\": 1,\n      \"unitPrice\": 15.0\n    }\n  ],\n  \"materials\": [\n    {\n      \"description\": \"Oil filter\",\n      \"quantity\": 1,\n      \"unitPrice\": 12.5\n    },\n    {\n      \"description\": \"Engine oil 1L\",\n      \"quantity\": 4,\n      \"unitPrice\": 8.0\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('appointmentId', Date.now() % 1000000000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.bill.id !== undefined) pm.collectionVariables.set('billId', j.bill.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create bill (manual totals)",
           "request": {
             "method": "POST",
             "header": [
@@ -996,10 +2750,10 @@
                 "bills"
               ]
             },
-            "description": "appointmentId/customerId/vehicleId required; fees must be non-negative.",
+            "description": "Low-level create with no validation or line items; prefer Checkout.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"appointmentId\": 1,\n  \"customerId\": {{customerId}},\n  \"vehicleId\": {{vehicleId}},\n  \"warrantyFee\": 0,\n  \"serviceFee\": 500000,\n  \"materialCost\": 250000\n}",
+              "raw": "{\n  \"appointmentId\": {{appointmentId}},\n  \"customerId\": {{customerId}},\n  \"vehicleId\": {{vehicleId}},\n  \"warrantyFee\": 0,\n  \"serviceFee\": 500000,\n  \"materialCost\": 250000\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1011,6 +2765,15 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('appointmentId', Date.now() % 1000000000);"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -1046,6 +2809,30 @@
           }
         },
         {
+          "name": "Get bill lines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/lines",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}",
+                "lines"
+              ]
+            },
+            "description": "Itemized lines (bills made by Checkout only).",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
           "name": "List bills by customer",
           "request": {
             "method": "GET",
@@ -1075,7 +2862,7 @@
           }
         },
         {
-          "name": "Record payment",
+          "name": "Record cash payment",
           "request": {
             "method": "POST",
             "header": [
@@ -1097,16 +2884,92 @@
                 "payments"
               ]
             },
-            "description": "type: DEPOSIT | FINAL. amount > 0.",
+            "description": "type: DEPOSIT | FINAL. CASH is SUCCEEDED immediately and publishes PaymentReceived.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"DEPOSIT\",\n  \"method\": \"CASH\",\n  \"amount\": 100000\n}",
+              "raw": "{\n  \"type\": \"DEPOSIT\",\n  \"method\": \"CASH\",\n  \"amount\": 10.0\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Start card payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}",
+                "payments"
+              ]
+            },
+            "description": "Creates a PENDING payment and a Stripe PaymentIntent via payment-service; returns clientSecret for Stripe.js and externalPaymentId (payment-service id). 502 when payment-service/Stripe is unavailable.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"FINAL\",\n  \"method\": \"CARD\",\n  \"amount\": 10.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.id !== undefined) pm.collectionVariables.set('billingPaymentId', j.id); }",
+                  "if (pm.response.code < 300) { const j = pm.response.json(); if (j.externalPaymentId !== undefined) pm.collectionVariables.set('externalPaymentId', j.externalPaymentId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel card payment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/api/v1/bills/{{billId}}/payments/{{billingPaymentId}}/cancel",
+              "host": [
+                "{{billingUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "{{billId}}",
+                "payments",
+                "{{billingPaymentId}}",
+                "cancel"
+              ]
+            },
+            "description": "Abandons a PENDING card payment. 409 if Stripe already charged it.",
             "auth": {
               "type": "noauth"
             }
@@ -1154,7 +3017,7 @@
                 "void"
               ]
             },
-            "description": "",
+            "description": "Only a PENDING bill with no card payment in flight.",
             "auth": {
               "type": "noauth"
             }
@@ -1208,6 +3071,221 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Payment Service",
+      "description": "payment-service (Spring Boot, :8085). The only service that talks to Stripe. Create/cancel are internal (called by billing); test-confirm and sync are handy for manual testing.",
+      "item": [
+        {
+          "name": "Get payment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentUrl}}/api/v1/payments/{{externalPaymentId}}",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{externalPaymentId}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Test-confirm (success card)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/api/v1/payments/{{externalPaymentId}}/test-confirm",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{externalPaymentId}}",
+                "test-confirm"
+              ]
+            },
+            "description": "Stripe test-mode keys only (403 with a live key). Confirms with a Stripe test card and applies the result like the webhook would, so no browser or `stripe listen` is needed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"pm_card_visa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Test-confirm (declined card)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/api/v1/payments/{{externalPaymentId}}/test-confirm",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{externalPaymentId}}",
+                "test-confirm"
+              ]
+            },
+            "description": "The payment stays PENDING with failureReason set; the customer can retry.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"pm_card_chargeDeclined\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Sync from Stripe",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{paymentUrl}}/api/v1/payments/{{externalPaymentId}}/sync",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{externalPaymentId}}",
+                "sync"
+              ]
+            },
+            "description": "Re-reads the PaymentIntent from Stripe and applies its status (recovers a missed webhook).",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Cancel payment (internal)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{paymentUrl}}/api/v1/payments/{{externalPaymentId}}/cancel",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "{{externalPaymentId}}",
+                "cancel"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create payment (internal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/api/v1/payments",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments"
+              ]
+            },
+            "description": "Normally only billing-service calls this. Idempotent per billingPaymentId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": {{billId}},\n  \"billingPaymentId\": 999999,\n  \"customerId\": {{customerId}},\n  \"amount\": 10.0,\n  \"currency\": \"usd\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Ops",
+          "item": [
+            {
+              "name": "Actuator health",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{paymentUrl}}/actuator/health",
+                  "host": [
+                    "{{paymentUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health"
+                  ]
+                },
+                "description": "",
+                "auth": {
+                  "type": "noauth"
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1229,6 +3307,11 @@
     {
       "key": "billingUrl",
       "value": "http://localhost:8084",
+      "type": "string"
+    },
+    {
+      "key": "paymentUrl",
+      "value": "http://localhost:8085",
       "type": "string"
     },
     {
@@ -1289,6 +3372,91 @@
     {
       "key": "vehicleUpdatedAt",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "billingPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "externalPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "seedCustomerNoWarranty",
+      "value": "685",
+      "type": "string"
+    },
+    {
+      "key": "seedVehicleNoWarranty",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "seedCustomerInWarranty",
+      "value": "625",
+      "type": "string"
+    },
+    {
+      "key": "seedVehicleInWarranty",
+      "value": "3",
+      "type": "string"
+    },
+    {
+      "key": "seedCustomerNotOwner",
+      "value": "148",
+      "type": "string"
+    },
+    {
+      "key": "flowCustomerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flowVehicleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "expectFee",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "billTotalCents",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "depositAmount",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cardAmount",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cashAmount",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "skipCardTo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pollAttempts",
+      "value": "0",
       "type": "string"
     }
   ]
