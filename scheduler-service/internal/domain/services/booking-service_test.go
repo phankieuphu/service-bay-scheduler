@@ -6,6 +6,7 @@ import (
 	"errors"
 	"scheduler-service/internal/constants"
 	"scheduler-service/internal/domain/entity"
+	"scheduler-service/internal/domain/events"
 	"scheduler-service/internal/domain/ports"
 	"testing"
 	"time"
@@ -52,6 +53,8 @@ type MockAppointmentRepository struct {
 	Stored         map[int64]entity.Appointment
 	Created        []entity.Appointment
 	Cancelled      []int64
+	Completed      []int64
+	CompleteErr    error
 	LockedVehicles []int64
 }
 
@@ -95,6 +98,23 @@ func (m *MockAppointmentRepository) ListByCustomer(_ context.Context, customerID
 func (m *MockAppointmentRepository) Cancel(_ context.Context, id int64) error {
 	m.Cancelled = append(m.Cancelled, id)
 	return nil
+}
+
+func (m *MockAppointmentRepository) Complete(_ context.Context, id int64) error {
+	if m.CompleteErr != nil {
+		return m.CompleteErr
+	}
+	m.Completed = append(m.Completed, id)
+	return nil
+}
+func (m *MockAppointmentRepository) ListByHub(_ context.Context, hubID int64, from, to time.Time) ([]entity.Appointment, error) {
+	var out []entity.Appointment
+	for _, a := range m.Stored {
+		if a.HubID == hubID && !a.Start.Before(from) && a.Start.Before(to) {
+			out = append(out, a)
+		}
+	}
+	return out, nil
 }
 
 type MockOutboxRepository struct{ Written []entity.OutboxMessage }
@@ -156,7 +176,7 @@ func newFixture(customers MockCustomers) fixture {
 	appointments := &MockAppointmentRepository{FreeBayID: 11, Stored: map[int64]entity.Appointment{}}
 	outbox := &MockOutboxRepository{}
 	svc := NewBookingService(catalog, appointments, outbox, MockTxManager{}, customers,
-		MockVehicles{Owned: []entity.Vehicle{{ID: 7, VIN: "VIN7"}}})
+		MockVehicles{Owned: []entity.Vehicle{{ID: 7, VIN: "VIN7"}}}, "USD")
 	svc.now = func() time.Time { return now }
 	return fixture{svc: svc, appointments: appointments, outbox: outbox}
 }
@@ -388,4 +408,84 @@ func TestCancel(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- Staff: hub day and completion -----------------------------------------
+
+func TestHubDay_UsesTheHubsLocalDay(t *testing.T) {
+	f := newFixture(jane)
+	f.appointments.Stored[1] = entity.Appointment{ID: 1, HubID: 1, Start: at(8, 0)}
+	// 23:30 the evening before in Saigon is the same UTC date as at(8, 0),
+	// but a different local day.
+	f.appointments.Stored[2] = entity.Appointment{ID: 2, HubID: 1, Start: at(8, 0).Add(-8*time.Hour - 30*time.Minute)}
+	f.appointments.Stored[3] = entity.Appointment{ID: 3, HubID: 2, Start: at(9, 0)}
+
+	day, err := f.svc.HubDay(t.Context(), 1, "2026-10-20")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(day.Appointments) != 1 || day.Appointments[0].ID != 1 || day.TimeZone != "Asia/Ho_Chi_Minh" {
+		t.Errorf("day = %+v", day)
+	}
+	if _, err := f.svc.HubDay(t.Context(), 1, "20-10-2026"); !errors.Is(err, ports.ErrInvalidInput) {
+		t.Errorf("bad date: err = %v", err)
+	}
+	if _, err := f.svc.HubDay(t.Context(), 99, "2026-10-20"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("unknown hub: err = %v", err)
+	}
+}
+
+func TestComplete_PublishesPricedServiceCompleted(t *testing.T) {
+	f := newFixture(jane)
+	f.appointments.Stored[5] = entity.Appointment{
+		ID: 5, HubID: 1, CustomerID: 42, VehicleID: 7, Status: constants.AppointmentBooked,
+		Services: []entity.AppointmentService{
+			{ServiceID: 1, Name: "Oil change", Fee: decimal.RequireFromString("45.00")},
+			{ServiceID: 2, Name: "Brake inspection", Fee: decimal.RequireFromString("60.50")},
+		},
+	}
+
+	got, err := f.svc.Complete(t.Context(), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != constants.AppointmentCompleted || len(f.appointments.Completed) != 1 {
+		t.Fatalf("got %+v, completed %v", got, f.appointments.Completed)
+	}
+	if len(f.outbox.Written) != 1 || f.outbox.Written[0].Topic != constants.TopicServiceCompleted || f.outbox.Written[0].Key != "5" {
+		t.Fatalf("outbox = %+v", f.outbox.Written)
+	}
+
+	var event events.ServiceCompletedEvent
+	if err := json.Unmarshal(f.outbox.Written[0].Payload, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.EventType != events.ServiceCompleted || event.AppointmentID != 5 || event.VehicleID != 7 ||
+		event.CustomerID != 42 || event.DealershipID != 1 || event.Currency != "USD" || event.EventID == "" {
+		t.Errorf("event = %+v", event)
+	}
+	if len(event.Services) != 2 || event.Services[1].UnitPriceMinor != 6050 || event.Services[1].Fee != "60.50" ||
+		event.Services[1].Quantity != 1 {
+		t.Errorf("services = %+v", event.Services)
+	}
+}
+
+func TestComplete_Rejections(t *testing.T) {
+	t.Run("not found", func(t *testing.T) {
+		f := newFixture(jane)
+		if _, err := f.svc.Complete(t.Context(), 404); !errors.Is(err, ports.ErrNotFound) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("already completed or cancelled", func(t *testing.T) {
+		f := newFixture(jane)
+		f.appointments.Stored[5] = entity.Appointment{ID: 5, HubID: 1, Status: constants.AppointmentCancelled}
+		f.appointments.CompleteErr = ports.ErrConflict
+		if _, err := f.svc.Complete(t.Context(), 5); !errors.Is(err, ports.ErrConflict) {
+			t.Fatalf("err = %v", err)
+		}
+		if len(f.outbox.Written) != 0 {
+			t.Errorf("outbox = %+v", f.outbox.Written)
+		}
+	})
 }

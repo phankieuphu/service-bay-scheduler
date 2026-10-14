@@ -45,4 +45,11 @@ type AppointmentRepository interface {
 	// Cancel marks a BOOKED appointment and its bay reservation cancelled,
 	// freeing the bay. ErrConflict if it isn't BOOKED any more.
 	Cancel(ctx context.Context, id int64) error
+	// Complete marks a BOOKED, CHECKED_IN or IN_PROGRESS appointment
+	// COMPLETED, releases its bay and marks its services DONE. ErrConflict if
+	// it's in any other state.
+	Complete(ctx context.Context, id int64) error
+	// ListByHub returns the hub's appointments starting in [from, to),
+	// earliest first.
+	ListByHub(ctx context.Context, hubID int64, from, to time.Time) ([]entity.Appointment, error)
 }

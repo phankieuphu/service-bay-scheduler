@@ -33,6 +33,14 @@ type Availability struct {
 	Slots           []Slot
 }
 
+// HubDay is a hub's appointments on one local day.
+type HubDay struct {
+	HubID        int64
+	Date         string
+	TimeZone     string
+	Appointments []entity.Appointment
+}
+
 type BookingService interface {
 	ListHubs(ctx context.Context) ([]entity.Hub, error)
 	ListServices(ctx context.Context) ([]entity.CatalogService, error)
@@ -44,4 +52,11 @@ type BookingService interface {
 	MyAppointments(ctx context.Context, caller entity.Principal) ([]entity.Appointment, error)
 	// Cancel cancels one of the caller's own upcoming appointments.
 	Cancel(ctx context.Context, caller entity.Principal, appointmentID int64) (entity.Appointment, error)
+	// HubDay lists a hub's appointments on date (YYYY-MM-DD, in the hub's
+	// time zone), earliest first. Staff only.
+	HubDay(ctx context.Context, hubID int64, date string) (HubDay, error)
+	// Complete marks an appointment's work done and publishes
+	// ServiceCompleted, which billing-service prices the bill from. Staff
+	// only.
+	Complete(ctx context.Context, appointmentID int64) (entity.Appointment, error)
 }

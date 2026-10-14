@@ -36,14 +36,16 @@ func TestRoutes_Roles(t *testing.T) {
 
 	routes := []struct {
 		method, path, body string
-		customerOnly       bool
+		who                string // "any", "customer" or "staff"
 	}{
-		{http.MethodGet, "/api/v1/hubs", "", false},
-		{http.MethodGet, "/api/v1/services", "", false},
-		{http.MethodGet, "/api/v1/hubs/1/availability?date=2026-10-20&service_id=1", "", false},
-		{http.MethodPost, "/api/v1/appointments", `{"hub_id":1,"vehicle_id":1,"service_ids":[1],"start":"2026-10-20T10:00:00+07:00"}`, true},
-		{http.MethodGet, "/api/v1/me/appointments", "", true},
-		{http.MethodPost, "/api/v1/appointments/1/cancel", "", true},
+		{http.MethodGet, "/api/v1/hubs", "", "any"},
+		{http.MethodGet, "/api/v1/services", "", "any"},
+		{http.MethodGet, "/api/v1/hubs/1/availability?date=2026-10-20&service_id=1", "", "any"},
+		{http.MethodPost, "/api/v1/appointments", `{"hub_id":1,"vehicle_id":1,"service_ids":[1],"start":"2026-10-20T10:00:00+07:00"}`, "customer"},
+		{http.MethodGet, "/api/v1/me/appointments", "", "customer"},
+		{http.MethodPost, "/api/v1/appointments/1/cancel", "", "customer"},
+		{http.MethodGet, "/api/v1/hubs/1/appointments?date=2026-10-20", "", "staff"},
+		{http.MethodPost, "/api/v1/appointments/1/complete", "", "staff"},
 	}
 
 	for _, rt := range routes {
@@ -62,7 +64,7 @@ func TestRoutes_Roles(t *testing.T) {
 					if w.Code != http.StatusUnauthorized {
 						t.Errorf("code = %d, want 401", w.Code)
 					}
-				case rt.customerOnly && token != "CUSTOMER":
+				case rt.who == "customer" && token != "CUSTOMER", rt.who == "staff" && token == "CUSTOMER":
 					if w.Code != http.StatusForbidden {
 						t.Errorf("code = %d, want 403", w.Code)
 					}

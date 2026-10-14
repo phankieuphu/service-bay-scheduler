@@ -9,6 +9,7 @@ import (
 	"scheduler-service/internal/constants"
 	"scheduler-service/internal/domain/entity"
 	"scheduler-service/internal/domain/ports"
+	"slices"
 	"strconv"
 	"time"
 
@@ -213,6 +214,49 @@ func (r AppointmentRepository) Cancel(ctx context.Context, id int64) error {
 		Where("appointment_id = ?", id).
 		Update("status", "CANCELLED").Error
 }
+
+// Complete implements [ports.AppointmentRepository].
+func (r AppointmentRepository) Complete(ctx context.Context, id int64) error {
+	db := database_provider.DBFromContext(ctx, r.db)
+
+	result := db.Model(&models.Appointment{}).
+		Where("id = ? AND status IN ?", id, []constants.AppointmentStatus{
+			constants.AppointmentBooked, constants.AppointmentCheckedIn, constants.AppointmentInProgress,
+		}).
+		Update("status", constants.AppointmentCompleted)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("%w: appointment %d can't be completed from its current status", ports.ErrConflict, id)
+	}
+
+	// RELEASED: the work is done. The slot stays recorded (the exclusion
+	// constraint only ignores CANCELLED), which is right for time that was used.
+	if err := db.Model(&models.AppointmentBay{}).
+		Where("appointment_id = ? AND status IN ?", id, []string{"RESERVED", "OCCUPIED"}).
+		Update("status", "RELEASED").Error; err != nil {
+		return err
+	}
+	return db.Model(&models.AppointmentService{}).
+		Where("appointment_id = ? AND status <> ?", id, "CANCELLED").
+		Update("status", "DONE").Error
+}
+
+// ListByHub implements [ports.AppointmentRepository].
+func (r AppointmentRepository) ListByHub(ctx context.Context, hubID int64, from, to time.Time) ([]entity.Appointment, error) {
+	appointments, err := r.load(ctx, "a.dealership_id = ? AND a.scheduled_start >= ? AND a.scheduled_start < ?",
+		[]any{hubID, from, to}, hubDayLimit)
+	if err != nil {
+		return nil, err
+	}
+	slices.Reverse(appointments) // load returns latest first
+	return appointments, nil
+}
+
+// hubDayLimit bounds one hub-day listing; a hub can't fit more bookings
+// than this into its opening hours.
+const hubDayLimit = 500
 
 // appointmentRow is one appointment joined with its (single) vehicle and
 // bay, as load selects it.
