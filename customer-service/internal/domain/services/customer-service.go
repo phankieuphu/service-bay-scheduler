@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -156,6 +157,67 @@ func (e *CustomerService) GetCustomer(ctx context.Context, customerID int64) (en
 	return customer, nil
 }
 
+// GetCustomerByUserID implements [ports.CustomerService].
+func (e *CustomerService) GetCustomerByUserID(ctx context.Context, userID string) (entity.Customer, error) {
+	customer, err := e.repository.GetByUserID(ctx, userID)
+	if err != nil && !errors.Is(err, ports.ErrNotFound) {
+		logger.ErrorContext(ctx, "failed to get customer by user", "user_id", userID, "error", err)
+	}
+	return customer, err
+}
+
+// LinkUser implements [ports.CustomerService]. A customer staff already
+// created with the user's email is claimed (CustomerUpdated); otherwise a
+// profile is created, named after the email's local part until the
+// customer edits it (CustomerCreated). Either write and its event share
+// one transaction, like every other write here.
+func (e *CustomerService) LinkUser(ctx context.Context, userID, email string) (entity.Customer, error) {
+	if existing, err := e.repository.GetByUserID(ctx, userID); err == nil {
+		return existing, nil
+	} else if !errors.Is(err, ports.ErrNotFound) {
+		return entity.Customer{}, err
+	}
+
+	var customer entity.Customer
+	err := e.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		eventType, topic := events.CustomerUpdated, constants.CustomerUpdate
+		linked, err := e.repository.LinkUserByEmail(ctx, userID, email)
+		switch {
+		case errors.Is(err, ports.ErrNotFound):
+			eventType, topic = events.CustomerCreated, constants.CustomerCreated
+			name, _, _ := strings.Cut(email, "@")
+			linked, err = e.repository.Create(ctx, entity.Customer{
+				UserID: userID,
+				Name:   name,
+				Email:  email,
+				Status: constants.StatusActive,
+			})
+			if err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		}
+		customer = linked
+
+		payload, err := json.Marshal(events.NewCustomerEvent(eventType, customer.UpdatedAt, events.NewCustomerState(customer)))
+		if err != nil {
+			return err
+		}
+		return e.outbox.Create(ctx, entity.OutboxMessage{
+			Topic:   topic,
+			Key:     strconv.FormatInt(customer.ID, 10),
+			Payload: payload,
+		})
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to link user to customer", "user_id", userID, "error", err)
+		return entity.Customer{}, err
+	}
+
+	return customer, nil
+}
+
 // GetCustomers implements [ports.CustomerService].
 func (e *CustomerService) GetCustomers(ctx context.Context, params ports.ListCustomersParams) (ports.CustomerPage, error) {
 	if params.Cursor < 0 {
@@ -166,6 +228,18 @@ func (e *CustomerService) GetCustomers(ctx context.Context, params ports.ListCus
 		params.Limit = defaultListLimit
 	case params.Limit > maxListLimit:
 		params.Limit = maxListLimit
+	}
+
+	params.Email = strings.TrimSpace(params.Email)
+	if params.Email != "" {
+		// Searches aren't cached: the key space is unbounded and someone
+		// searching usually wants a just-created customer to show up.
+		page, err := e.repository.List(ctx, params)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to search customers", "cursor", params.Cursor, "limit", params.Limit, "error", err)
+			return ports.CustomerPage{}, err
+		}
+		return page, nil
 	}
 
 	cacheKey := fmt.Sprintf(customersPageCacheKeyFormat, params.Cursor, params.Limit)

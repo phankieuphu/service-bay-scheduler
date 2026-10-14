@@ -18,6 +18,10 @@ export function CustomersPage({ onOpenVehicle }: { onOpenVehicle: (vehicleId: nu
   const [selected, setSelected] = useState<Customer | null>(null)
   const [creating, setCreating] = useState(false)
   const [lookupId, setLookupId] = useState('')
+  const [emailInput, setEmailInput] = useState('')
+  // The email filter the current list was loaded with; Load more and Refresh
+  // keep using it until the next search.
+  const [emailFilter, setEmailFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -31,11 +35,11 @@ export function CustomersPage({ onOpenVehicle }: { onOpenVehicle: (vehicleId: nu
     setError(err instanceof Error ? err.message : 'Failed to load customers.')
   }
 
-  async function loadPage(cursor: number) {
+  async function loadPage(cursor: number, email = emailFilter) {
     setError(null)
     setLoading(true)
     try {
-      applyPage(await listCustomers(cursor, PAGE_SIZE), cursor)
+      applyPage(await listCustomers(cursor, PAGE_SIZE, email), cursor)
     } catch (err) {
       applyError(err)
     } finally {
@@ -49,6 +53,20 @@ export function CustomersPage({ onOpenVehicle }: { onOpenVehicle: (vehicleId: nu
       .catch(applyError)
       .finally(() => setLoading(false))
   }, [])
+
+  function handleSearch(event: FormEvent) {
+    event.preventDefault()
+    setNotice(null)
+    const email = emailInput.trim()
+    setEmailFilter(email)
+    loadPage(0, email)
+  }
+
+  function clearSearch() {
+    setEmailInput('')
+    setEmailFilter('')
+    loadPage(0, '')
+  }
 
   function select(customer: Customer | null) {
     setError(null)
@@ -105,7 +123,7 @@ export function CustomersPage({ onOpenVehicle }: { onOpenVehicle: (vehicleId: nu
       <div className="two-col">
         <section className="card stack" aria-labelledby="customers-heading">
           <div className="panel-header">
-            <h2 id="customers-heading">All customers</h2>
+            <h2 id="customers-heading">{emailFilter ? 'Search results' : 'All customers'}</h2>
             <form className="inline-form" onSubmit={handleLookup}>
               <label htmlFor="customer-lookup-id" className="visually-hidden">
                 Customer ID
@@ -121,6 +139,27 @@ export function CustomersPage({ onOpenVehicle }: { onOpenVehicle: (vehicleId: nu
               <button type="submit">Look up</button>
             </form>
           </div>
+
+          <form className="inline-form" role="search" onSubmit={handleSearch}>
+            <label htmlFor="customer-search-email" className="visually-hidden">
+              Search by email
+            </label>
+            <input
+              id="customer-search-email"
+              type="search"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="Search by email"
+            />
+            <button type="submit" disabled={loading}>
+              Search
+            </button>
+            {emailFilter && (
+              <button type="button" className="secondary" disabled={loading} onClick={clearSearch}>
+                Clear
+              </button>
+            )}
+          </form>
 
           {error && <p className="message error flush">{error}</p>}
           {notice && <p className="message success flush">{notice}</p>}
@@ -151,7 +190,11 @@ export function CustomersPage({ onOpenVehicle }: { onOpenVehicle: (vehicleId: nu
                 </button>
               </div>
             ))}
-            {!loading && customers.length === 0 && <p className="muted empty">No customers yet.</p>}
+            {!loading && customers.length === 0 && (
+              <p className="muted empty">
+                {emailFilter ? `No customers match “${emailFilter}”.` : 'No customers yet.'}
+              </p>
+            )}
           </div>
 
           <div className="actions">

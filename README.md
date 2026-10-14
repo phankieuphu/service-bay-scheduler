@@ -1,6 +1,6 @@
 # Service Bay
 
-Service Bay is a microservices backend (plus a React web app) for a vehicle service and booking business: customers, their vehicles, ownership and warranty, and, later, bookings at service hubs, billing and notifications.
+Service Bay is a microservices backend (plus a React web app) for a vehicle service and booking business: customers, their vehicles, ownership and warranty, bookings at service hubs, and, later, billing and notifications.
 
 The Go services follow a hexagonal (ports and adapters) layout, keep one Postgres database per service, and publish domain events to Kafka through a transactional outbox.
 
@@ -13,19 +13,22 @@ Last updated: 2026-09-29.
 | Component | State | What it does today |
 |-----------|-------|--------------------|
 | **identity-service** (`:8083`) | Implemented | Register, login, refresh and logout (JWT access token + refresh token in Redis), `GET /me`. Publishes `UserCreated` to `identity.user-events`. |
-| **customer-service** (`:8080`) | Implemented | Customer CRUD with cursor pagination, optimistic locking on update, soft delete. Publishes to `customer.events`; consumes `identity.user-events`. |
+| **customer-service** (`:8080`) | Implemented | Customer CRUD with cursor pagination, optimistic locking on update, soft delete. Consumes `identity.user-events` to give every `CUSTOMER` user a linked profile (`GET /customer/me`). Publishes `customer.account.*` events. |
 | **vehicle-service** (`:8081`) | Implemented | Register, search (VIN / plate), update status and warranty, assign owner, transfer ownership (row-locked), list a customer's vehicles, warranty / materials / service-history reads. Publishes `vehicle.*` events. |
-| **frontend** (`:5173`) | Implemented | React 19 + Vite app: sign in / sign up, customer list and detail, vehicle search, register, detail, ownership and records. |
+| **scheduler-service** (`:8085`) | Implemented | Booking: hubs, service catalog, free-slot search, book, list and cancel your own appointments. A Postgres exclusion constraint prevents double-booking a bay. Publishes `scheduler.appointment.*` events. See [scheduler-service/README.md](scheduler-service/README.md). |
+| **frontend** (`:5173`) | Implemented | React 19 + Vite app: sign in / sign up. Staff: customer list and detail, vehicle search, register, detail, ownership and records. Customers: book a service, see and cancel their appointments. |
 | Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Flink, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
 | Load tests | Implemented | k6 and curl scenarios (smoke, baseline, load, stress, spike, soak) in [loadtest/](loadtest/). |
 | **billing-service** (`:8084`) | Scaffolded | Java 25 / Spring Boot 4 service with health, metrics and Flyway wired up. Deposits, bills and Stripe payments are being built ([#35](https://github.com/phankieuphu/service-bay-scheduler/issues/35)). |
-| dealership, scheduler, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
+| dealership, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
 
 Known gaps:
 
-- vehicle-service and customer-service log `identity.user-events` but don't create local profiles from them yet.
+- vehicle-service logs `identity.user-events` but doesn't act on them.
+- dealership-service doesn't exist yet, so scheduler-service's hubs, bays and service catalog are a local snapshot loaded from the dev seed ([postgres/seed/init-scheduler.sql](postgres/seed/init-scheduler.sql)) rather than kept current by dealership events.
+- Only customers book, for themselves. There's no staff view of a hub's appointments, no check-in or completion, and no technician assignment yet.
 - The frontend calls the services directly (CORS is open, `*`); there is no API gateway.
-- customer-service and vehicle-service check identity-service access tokens, but customers aren't linked to identity users yet. So customer-service is staff-only, and a `CUSTOMER` can read vehicles but can't be limited to their own.
+- customer-service and vehicle-service check identity-service access tokens. A `CUSTOMER` can read their own linked profile (`GET /customer/me`); the rest of customer-service is staff-only. vehicle-service doesn't know which customer a user is, so a `CUSTOMER` can read any vehicle.
 - customer-service and vehicle-service use `BIGINT` ids, not the UUIDs the architecture calls for (see [architecture-design.md §0](docs/architecture-design.md)).
 - The service Dockerfiles build `GOARCH=amd64` binaries (see [Troubleshooting](#troubleshooting) for Apple Silicon).
 
@@ -39,7 +42,7 @@ Known gaps:
 * [Data Warehouse Design](docs/data-warehouse-design.md): Kimball bus matrix, star schemas, CDC + dbt load plan, sizing per tier
 * [Responsibility Planning](docs/responsibility-planning.md)
 * [AI Agents](docs/ai-agents.md): PR description review and issue/PR labeler workflows: what they do, setup, and troubleshooting
-* Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md), [billing-service](billing-service/README.md)
+* Service API references: [identity-service](identity-service/README.md), [customer-service](customer-service/README.md), [vehicle-service](vehicle-service/README.md), [scheduler-service](scheduler-service/README.md), [billing-service](billing-service/README.md)
 * [Kubernetes manifests and load-test tiers](k8s/README.md)
 * [Deploying (Railway + Vercel)](docs/railway.md)
 * [Load tests](loadtest/README.md)
@@ -53,6 +56,7 @@ Known gaps:
 ├── identity-service/    Go module: auth, users, JWT
 ├── customer-service/    Go module: customer profiles
 ├── vehicle-service/     Go module: vehicles, ownership, warranty
+├── scheduler-service/   Go module: hubs, availability, bookings
 ├── billing-service/     Java/Spring Boot (Gradle): deposits, bills, Stripe payments
 ├── frontend/            React + TypeScript + Vite web app
 ├── postgres/            init SQL (one database per service) and seed data
@@ -75,13 +79,13 @@ Known gaps:
 | kubectl | any recent version | Kubernetes only |
 | k6, psql | | load tests only |
 
-Ports used on `localhost`: 3000, 3100, 5173, 5432, 6379, 8080–8083, 9090, 9092, 12345. Stop anything else listening on them first.
+Ports used on `localhost`: 3000, 3100, 5173, 5432, 6379, 8080–8085, 9090, 9092, 12345. Stop anything else listening on them first.
 
 ---
 
 ## Quick start (Docker Compose)
 
-This runs all three services and every piece of infrastructure. You only need Docker.
+This runs every service and every piece of infrastructure. You only need Docker.
 
 1. Clone and enter the repo:
 
@@ -96,7 +100,7 @@ This runs all three services and every piece of infrastructure. You only need Do
    docker compose up -d --build
    ```
 
-   On first start, Postgres runs [postgres/init/](postgres/init/), which creates one database per service (`identity_db`, `customer_db`, `vehicle_db`, …). identity-, customer- and vehicle-service then create their own tables by applying their migrations on startup. The one-shot `db-seed` container waits for those tables and loads seed customers and vehicles. The services wait for Postgres to be healthy.
+   On first start, Postgres runs [postgres/init/](postgres/init/), which creates one database per service (`identity_db`, `customer_db`, `vehicle_db`, …). identity-, customer-, vehicle- and scheduler-service then create their own tables by applying their migrations on startup. The one-shot `db-seed` container waits for those tables and loads seed customers, vehicles, and scheduler's hubs and service catalog. The services wait for Postgres to be healthy.
 
 3. Check that everything is up:
 
@@ -132,6 +136,7 @@ This runs all three services and every piece of infrastructure. You only need Do
 | http://localhost:8083/api/v1 | identity-service |
 | http://localhost:8080/api/v1 | customer-service |
 | http://localhost:8081/api/v1 | vehicle-service |
+| http://localhost:8085/api/v1 | scheduler-service |
 | http://localhost:8084 | billing-service (`/actuator/health`, `/actuator/prometheus`) |
 | http://localhost:3000 | Grafana (`admin` / `admin`) |
 | http://localhost:9090 | Prometheus |
@@ -150,7 +155,7 @@ docker compose down                                # stop, keep data
 docker compose down -v                             # stop and delete all data
 ```
 
-**Schema changes.** identity-, customer- and vehicle-service own their schemas as numbered [goose](https://github.com/pressly/goose) migrations in `<service>/migrations/`, embedded in the binary. Each service applies pending ones on startup under a Postgres advisory lock, so replicas take turns. Existing volumes pick up changes without `down -v`:
+**Schema changes.** identity-, customer-, vehicle- and scheduler-service own their schemas as numbered [goose](https://github.com/pressly/goose) migrations in `<service>/migrations/`, embedded in the binary. Each service applies pending ones on startup under a Postgres advisory lock, so replicas take turns. Existing volumes pick up changes without `down -v`:
 
 ```bash
 cd vehicle-service
@@ -165,7 +170,7 @@ go run ./cmd/migrate down          # roll back the latest one
 
 ## Run the frontend
 
-The frontend is a Vite dev server that calls the three services directly.
+The frontend is a Vite dev server that calls the services directly.
 
 ```bash
 cd frontend
@@ -179,6 +184,7 @@ npm run dev             # http://localhost:5173
 | `VITE_IDENTITY_API_URL` | `http://localhost:8083/api/v1` |
 | `VITE_CUSTOMER_API_URL` | `http://localhost:8080/api/v1` |
 | `VITE_VEHICLE_API_URL` | `http://localhost:8081/api/v1` |
+| `VITE_SCHEDULER_API_URL` | `http://localhost:8085/api/v1` |
 
 Other scripts: `npm run build` (type-check and production build into `dist/`), `npm run preview`, `npm run lint` (oxlint).
 
@@ -297,6 +303,7 @@ kubectl get pods -n service-bay -w
 | customer-service | 8080         | 30080    |
 | vehicle-service  | 8081         | 30081    |
 | identity-service | 8083         | 30083    |
+| scheduler-service | 8085        | 30085    |
 | billing-service  | 8084         | 30084    |
 | prometheus       | 9090         | 30090    |
 | grafana          | 3000         | 30030    |
@@ -308,6 +315,7 @@ Docker Desktop's Kubernetes (kind-based) does **not** expose NodePorts on `local
 kubectl port-forward -n service-bay svc/customer-service 8080:8080
 kubectl port-forward -n service-bay svc/vehicle-service  8081:8081
 kubectl port-forward -n service-bay svc/identity-service 8083:8083
+kubectl port-forward -n service-bay svc/scheduler-service 8085:8085
 kubectl port-forward -n service-bay svc/grafana          3000:3000   # admin/admin
 kubectl port-forward -n service-bay svc/prometheus       9090:9090
 kubectl port-forward -n service-bay svc/flink-jobmanager 8082:8081

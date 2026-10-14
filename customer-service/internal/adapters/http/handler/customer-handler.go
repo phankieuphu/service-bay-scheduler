@@ -20,11 +20,12 @@ func NewCustomerHandler(service ports.CustomerService) *CustomerHandler {
 	return &CustomerHandler{service: service}
 }
 
-// RegisterRoutes expects r to already require authentication. Customer
-// records are staff-managed: they aren't linked to identity users yet, so a
-// CUSTOMER can't be limited to their own record and gets 403 here.
-// Deleting is for managers and admins only.
+// RegisterRoutes expects r to already require authentication. Any
+// signed-in user can read their own linked profile (/customer/me); the rest
+// is staff-managed, and deleting is for managers and admins only.
 func (h *CustomerHandler) RegisterRoutes(r *gin.RouterGroup) {
+	r.GET("/customer/me", h.GetMyProfile)
+
 	staff := r.Group("", middleware.RequireRole(entity.StaffRoles...))
 	staff.POST("/customer", h.CreateCustomer)
 	staff.GET("/customer", h.ListCustomers)
@@ -71,6 +72,25 @@ func (h *CustomerHandler) GetCustomer(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ports.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, toCustomerDTO(customer))
+}
+
+// GetMyProfile returns the customer linked to the caller's identity user.
+// 404 until the identity.user-events consumer has linked one, e.g. for a
+// staff user or a few seconds after sign-up.
+func (h *CustomerHandler) GetMyProfile(c *gin.Context) {
+	principal, _ := c.Value(middleware.PrincipalKey).(entity.Principal)
+
+	customer, err := h.service.GetCustomerByUserID(c.Request.Context(), principal.UserID)
+	if err != nil {
+		if errors.Is(err, ports.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no customer profile is linked to this account"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -135,6 +155,7 @@ func (h *CustomerHandler) ListCustomers(c *gin.Context) {
 	page, err := h.service.GetCustomers(c.Request.Context(), ports.ListCustomersParams{
 		Cursor: cursor,
 		Limit:  limit,
+		Email:  c.Query("email"),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

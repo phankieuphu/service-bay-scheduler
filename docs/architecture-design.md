@@ -11,14 +11,15 @@ Most of this document is the **target** design. §0 says how much of it is built
 | Part of the design | Status |
 |---|---|
 | identity-service | Built: register, login, refresh, logout, `GET /me`, admin user provisioning and status changes. Publishes `UserCreated` and `UserUpdated` (§3a). |
-| customer-service | Built: customer CRUD, cursor pagination, optimistic locking, soft delete. Publishes the §3c events. Consumes `identity.user-events` but only logs them for now. |
+| customer-service | Built: customer CRUD, cursor pagination, optimistic locking, soft delete. Publishes the §3c events. Consumes `identity.user-events`: every `CUSTOMER` user gets a profile linked by `user_id` (an existing customer with the same email is claimed, otherwise one is created), readable at `GET /customer/me`. |
 | vehicle-service | Built: registry, owner assign/transfer, warranty, installed materials, service history. Produces and consumes the §3b events. Consumes `identity.user-events` but only logs them for now. |
-| dealership, scheduler, billing, notification, report services | Not built. Each has a database and schema in `postgres/init/` (`04`–`08`), and nothing else yet. |
-| API Gateway (§2, §7) | Not built. The web app (`frontend/`) calls each service directly, and the services allow any CORS origin. Only identity-service validates tokens (`GET /me`); customer-service and vehicle-service endpoints are unauthenticated. |
-| Transactional outbox (§3) | Built in all three services: outbox row in the same transaction, relay polls every 2 s. |
+| scheduler-service | Built: hubs, service catalog, free-slot search, booking, a customer's own appointments and cancellation. Bay double-booking is prevented by the exclusion constraint (§4); vehicle double-booking by a per-vehicle advisory lock plus an overlap check. Checks the caller's profile and vehicles synchronously (§4 option 1). Publishes the §3d events. Its hub/bay/catalog tables are a local snapshot (§5b) filled from the dev seed until dealership-service exists. No staff workflow (check-in, completion, technicians) and no `ServiceCompleted` yet. |
+| dealership, billing, notification, report services | Not built. dealership, notification and report have a database and schema in `postgres/init/` (`04`, `07`, `08`) and nothing else yet; billing-service is scaffolded in Java. |
+| API Gateway (§2, §7) | Not built. The web app (`frontend/`) calls each service directly, and the services allow any CORS origin. Each service verifies identity-service's access tokens itself (shared HS256 secret). |
+| Transactional outbox (§3) | Built in all four Go services: outbox row in the same transaction, relay polls every 2 s. |
 | Database per service (§5, §7) | Built: one Postgres instance, one database per service, no cross-database FKs. |
-| Ids (§5a) | Partly as designed. identity-service mints UUIDs; customer-service and vehicle-service still use `BIGINT` identity keys, and cross-service references (`customer_vehicle.customer_id`, `vehicle_material.material_id`, …) are `BIGINT` too. Customer profiles don't store the identity `user_id` yet. |
-| Redis (§7) | Used for identity-service refresh tokens and a 30 s cache of customer list pages. No availability cache yet (no scheduler-service). |
+| Ids (§5a) | Partly as designed. identity-service mints UUIDs; customer-service and vehicle-service still use `BIGINT` identity keys, and cross-service references (`customer_vehicle.customer_id`, `vehicle_material.material_id`, …) are `BIGINT` too. Customer profiles store the identity `user_id` (§3a). scheduler-service's ids are `BIGINT` too. |
+| Redis (§7) | Used for identity-service refresh tokens and a 30 s cache of customer list pages. No availability cache yet: scheduler-service answers availability from Postgres. |
 | Kafka (§3, §7) | One broker (KRaft in Docker Compose, ZooKeeper in `k8s/`), auto-created topics. |
 | Flink | Deployed in Compose and `k8s/`, but no jobs yet. |
 | Data warehouse (§9) | Designed in `data-warehouse-design.md` (Kimball, CDC with Debezium, dbt). Not built. |
@@ -143,7 +144,7 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 - `user.id` is a UUID minted by identity-service. A consuming service stores it as a plain `user_id` reference on its own profile row (§5a), not as that row's primary key.
 - Delivery is at-least-once (outbox relay + Kafka), so consumers must be idempotent — dedupe on `event_id` or upsert by `user.id`.
 - Fields may be added; existing fields are never renamed or removed without a new topic version.
-- **Current consumers**: customer-service and vehicle-service subscribe and log each message. Creating a local profile from `UserCreated` is not implemented yet.
+- **Current consumers**: customer-service gives each `CUSTOMER` user a profile with `user_id` set, on `UserCreated` and `UserUpdated` (idempotent: an already-linked user is a no-op). It first claims an unlinked customer with the same email, which emits `CustomerUpdated`; otherwise it creates one named after the email's local part, which emits `CustomerCreated`. vehicle-service subscribes and only logs each message.
 
 ---
 
@@ -207,6 +208,7 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
   "occurred_at": "2026-09-29T10:00:00.000Z",
   "customer": {
     "id": 7,
+    "user_id": "730a9309-3ca5-4110-a8a1-6c0b3b94e416",
     "name": "Jane Doe",
     "email": "jane@example.com",
     "phone": "0901234567",
@@ -220,11 +222,42 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 
 | Topic | `event_type` | When | `customer` payload |
 |---|---|---|---|
-| `customer.account.created.v1` | `CustomerCreated` | `POST /customer` | `id`, `name`, `email`, `phone` (omitted if empty), `birth_day`, `status`, `created_at`, `updated_at` |
-| `customer.account.updated.v1` | `CustomerUpdated` | `PUT /customer/:id` | same as `CustomerCreated`, the full state after the change |
+| `customer.account.created.v1` | `CustomerCreated` | `POST /customer`, or a new `CUSTOMER` user with no matching customer (§3a) | `id`, `user_id` (omitted if not linked), `name`, `email`, `phone` (omitted if empty), `birth_day` (omitted if unknown), `status`, `created_at`, `updated_at` |
+| `customer.account.updated.v1` | `CustomerUpdated` | `PUT /customer/:id`, or a user claiming an existing customer by email (§3a) | same as `CustomerCreated`, the full state after the change |
 | `customer.account.deleted.v1` | `CustomerDeleted` | `DELETE /customer/:id` (soft delete) | `id`, `deleted_at` |
 
 Nothing consumes these topics yet. A consumer should dedupe on `event_id` or upsert by `customer.id`.
+
+### 3d. scheduler-service event contracts
+
+**Produced** (via the outbox; key = appointment id). Topic names come from `scheduler-service/internal/constants/topics.go`. Same envelope as §3a, with the payload under `appointment`. `dealership_id` is the hub, named as in `ServiceCompleted` (§3b). Money is a decimal string.
+
+```json
+{
+  "event_id": "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+  "event_type": "AppointmentBooked",
+  "occurred_at": "2026-10-13T09:00:00.000Z",
+  "appointment": {
+    "id": 12,
+    "dealership_id": 1,
+    "customer_id": 1001,
+    "vehicle_id": 7,
+    "bay_id": 101,
+    "scheduled_start": "2026-10-20T03:00:00.000Z",
+    "scheduled_end": "2026-10-20T04:30:00.000Z",
+    "status": "BOOKED",
+    "total_amount": "105.50",
+    "services": [{ "service_id": 1, "name": "Oil and filter change", "fee": "45.00" }]
+  }
+}
+```
+
+| Topic | `event_type` | When |
+|---|---|---|
+| `scheduler.appointment.booked.v1` | `AppointmentBooked` | `POST /appointments` |
+| `scheduler.appointment.cancelled.v1` | `AppointmentCancelled` | `POST /appointments/:id/cancel`; `status` is `CANCELLED` |
+
+Nothing consumes these yet; notification-service (booking confirmations) and billing-service (deposits) are the intended consumers. `ServiceCompleted` (§3b) isn't published yet, since nothing marks an appointment completed.
 
 ---
 

@@ -7,9 +7,11 @@ import (
 	"customer-service/internal/domain/entity"
 	"customer-service/internal/domain/ports"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // pgUniqueViolationCode is PostgreSQL's SQLSTATE code for a unique-key
@@ -36,7 +38,13 @@ func (c CustomerRepository) SoftDelete(ctx context.Context, id int64) error {
 func (c CustomerRepository) Create(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
 	model := c.toModels(customer)
 
-	if err := database_provider.DBFromContext(ctx, c.db).Create(&model).Error; err != nil {
+	db := database_provider.DBFromContext(ctx, c.db)
+	if customer.BirthDay.IsZero() {
+		// A profile created from a sign-up has no birthday yet: store NULL,
+		// not 0001-01-01.
+		db = db.Omit("birthday")
+	}
+	if err := db.Create(&model).Error; err != nil {
 		if isDuplicateKeyError(err) {
 			return entity.Customer{}, ports.ErrConflict
 		}
@@ -73,11 +81,53 @@ func (c CustomerRepository) GetByID(ctx context.Context, id int64) (entity.Custo
 	return c.toDomain(model), nil
 }
 
+// GetByUserID implements [ports.CustomerRepository].
+func (c CustomerRepository) GetByUserID(ctx context.Context, userID string) (entity.Customer, error) {
+	var model models.Customer
+
+	if err := database_provider.DBFromContext(ctx, c.db).Where("user_id = ?", userID).First(&model).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.Customer{}, ports.ErrNotFound
+		}
+		return entity.Customer{}, err
+	}
+
+	return c.toDomain(model), nil
+}
+
+// LinkUserByEmail implements [ports.CustomerRepository]. It only claims a
+// profile no other user is linked to, so it can't move a login from one
+// customer to another.
+func (c CustomerRepository) LinkUserByEmail(ctx context.Context, userID, email string) (entity.Customer, error) {
+	var rows []models.Customer
+
+	result := database_provider.DBFromContext(ctx, c.db).
+		Model(&rows).
+		Clauses(clause.Returning{}).
+		Where("email = ? AND user_id IS NULL", email).
+		Update("user_id", userID)
+	if result.Error != nil {
+		if isDuplicateKeyError(result.Error) {
+			return entity.Customer{}, ports.ErrConflict
+		}
+		return entity.Customer{}, result.Error
+	}
+	if len(rows) == 0 {
+		return entity.Customer{}, ports.ErrNotFound
+	}
+
+	return c.toDomain(rows[0]), nil
+}
+
 // List implements [ports.CustomerRepository]. It keyset-paginates by id
 // ascending: only rows with id greater than params.Cursor are returned, so a
 // page stays stable even if earlier rows are inserted/deleted concurrently.
 // It fetches one row past the requested limit to determine HasMore without a
 // separate count query.
+// likeEscaper escapes LIKE wildcards so a search for "a_b" matches the
+// literal underscore instead of any character.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 func (c CustomerRepository) List(ctx context.Context, params ports.ListCustomersParams) (ports.CustomerPage, error) {
 	var rows []models.Customer
 
@@ -86,6 +136,9 @@ func (c CustomerRepository) List(ctx context.Context, params ports.ListCustomers
 		Limit(params.Limit + 1)
 	if params.Cursor > 0 {
 		query = query.Where("id > ?", params.Cursor)
+	}
+	if params.Email != "" {
+		query = query.Where("email ILIKE ? ESCAPE '\\'", "%"+likeEscaper.Replace(params.Email)+"%")
 	}
 
 	if err := query.Find(&rows).Error; err != nil {
@@ -163,8 +216,13 @@ func isDuplicateKeyError(err error) bool {
 }
 
 func (c CustomerRepository) toModels(customer entity.Customer) models.Customer {
+	var userID *string
+	if customer.UserID != "" {
+		userID = &customer.UserID
+	}
 	return models.Customer{
 		ID:        customer.ID,
+		UserID:    userID,
 		Name:      customer.Name,
 		Email:     customer.Email,
 		Phone:     customer.Phone,
@@ -176,8 +234,13 @@ func (c CustomerRepository) toModels(customer entity.Customer) models.Customer {
 }
 
 func (c CustomerRepository) toDomain(model models.Customer) entity.Customer {
+	var userID string
+	if model.UserID != nil {
+		userID = *model.UserID
+	}
 	return entity.Customer{
 		ID:        model.ID,
+		UserID:    userID,
 		Name:      model.Name,
 		Email:     model.Email,
 		Phone:     model.Phone,

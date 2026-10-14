@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [customer-service, vehicle-service, identity-service]
+        service: [customer-service, vehicle-service, identity-service, scheduler-service]
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [customer-service, vehicle-service, identity-service, billing-service]
+        service: [customer-service, vehicle-service, identity-service, scheduler-service, billing-service]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -138,7 +138,7 @@ jobs:
           cache-dependency-path: "*/go.sum"
       - name: Apply each service's migrations
         run: |
-          for svc in identity customer vehicle; do
+          for svc in identity customer vehicle scheduler; do
             (cd "$svc-service" && DB_HOST=localhost DB_PASSWORD=postgres DB_NAME="${svc}_db" go run ./cmd/migrate up)
           done
       - name: Load the dev seeds
@@ -146,8 +146,9 @@ jobs:
           docker exec pg sh /seed/seed.sh
           docker exec pg psql -U postgres -d customer_db -Atc "SELECT 'customers', count(*) FROM customer"
           docker exec pg psql -U postgres -d vehicle_db -Atc "SELECT 'vehicles', count(*) FROM vehicle"
+          docker exec pg psql -U postgres -d scheduler_db -Atc "SELECT 'hubs', count(*) FROM hub"
       - name: Migrations are idempotent
         run: |
-          for svc in identity customer vehicle; do
+          for svc in identity customer vehicle scheduler; do
             (cd "$svc-service" && DB_HOST=localhost DB_PASSWORD=postgres DB_NAME="${svc}_db" go run ./cmd/migrate up | tee /dev/stderr | grep -q "no pending migrations")
           done

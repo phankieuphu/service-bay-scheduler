@@ -1,8 +1,9 @@
 #!/bin/sh
-# Loads the dev seed data (init-customer.sql, init-vehicle.sql) into
-# customer_db and vehicle_db. The tables belong to the services' migrations,
-# so this waits until customer-service and vehicle-service have created
-# them, and skips a table that already has rows, so it's safe to re-run.
+# Loads the dev seed data (init-customer.sql, init-vehicle.sql,
+# init-scheduler.sql) into customer_db, vehicle_db and scheduler_db. The
+# tables belong to the services' migrations, so this waits until
+# customer-service, vehicle-service and scheduler-service have created them,
+# and skips a table that already has rows, so it's safe to re-run.
 #
 # docker-compose runs it as the db-seed service. Elsewhere:
 #   PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres sh postgres/seed/seed.sh
@@ -41,4 +42,5 @@ seed() {
 
 seed customer_db customer "$DIR/init-customer.sql"
 seed vehicle_db vehicle "$DIR/init-vehicle.sql"
+seed scheduler_db hub "$DIR/init-scheduler.sql"
 echo "seed: done"

@@ -37,6 +37,12 @@ scrape_configs:
       - targets: ["identity-service:8083"]
         labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: identity-service }
 
+  - job_name: scheduler-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["scheduler-service:8085"]
+        labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: scheduler-service }
+
   - job_name: billing-service
     metrics_path: /actuator/prometheus
     static_configs:

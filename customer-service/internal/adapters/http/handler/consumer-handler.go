@@ -4,8 +4,10 @@ import (
 	"context"
 	"customer-service/internal/adapters/kafka"
 	"customer-service/internal/domain/events"
+	"customer-service/internal/domain/ports"
 	"customer-service/pkg/logger"
 	"encoding/json"
+	"errors"
 )
 
 // ConsumerHandle processes one message. payload is the raw message value
@@ -59,22 +61,39 @@ func (t TopicHandle) NewMessageHandler() kafka.MessageHandler {
 }
 
 // RegisterConsumer wires the identity.user-events handlers for topic.
-func RegisterConsumer(topic string) TopicHandle {
+func RegisterConsumer(topic string, service ports.CustomerService) TopicHandle {
+	handle := identifyHandle(service)
 	return NewTopicHandle(topic,
-		NewConsumerHandler(events.UserCreated, identifyHandle),
-		NewConsumerHandler(events.UserUpdated, identifyHandle),
+		NewConsumerHandler(events.UserCreated, handle),
+		NewConsumerHandler(events.UserUpdated, handle),
 	)
 }
 
-func identifyHandle(ctx context.Context, value []byte) error {
-	var event events.UserEvent
-	if err := json.Unmarshal(value, &event); err != nil {
-		logger.ErrorContext(ctx, "decode user event", "error", err)
+// identifyHandle gives every CUSTOMER user a linked customer profile.
+// LinkUser is a no-op for a user that already has one, so redelivered
+// events are harmless.
+func identifyHandle(service ports.CustomerService) ConsumerHandle {
+	return func(ctx context.Context, value []byte) error {
+		var event events.UserEvent
+		if err := json.Unmarshal(value, &event); err != nil {
+			logger.ErrorContext(ctx, "decode user event", "error", err)
+			return nil
+		}
+		if event.User.Role != events.UserRoleCustomer || event.User.ID == "" || event.User.Email == "" {
+			return nil
+		}
+
+		customer, err := service.LinkUser(ctx, event.User.ID, event.User.Email)
+		if errors.Is(err, ports.ErrConflict) {
+			// The email belongs to a customer already linked to another user
+			// (or one that was deleted). Retrying won't change that.
+			logger.WarnContext(ctx, "user not linked: email taken by another customer", "event_id", event.EventID, "user_id", event.User.ID)
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "user linked to customer", "event_id", event.EventID, "event_type", event.EventType, "user_id", event.User.ID, "customer_id", customer.ID)
 		return nil
 	}
-	if event.User.Role != events.UserRoleCustomer {
-		return nil
-	}
-	logger.InfoContext(ctx, "identify handle", "event_id", event.EventID, "event_type", event.EventType, "user_id", event.User.ID)
-	return nil
 }
