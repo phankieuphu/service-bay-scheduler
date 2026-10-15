@@ -13,6 +13,14 @@ type Config struct {
 	Upstream
 	Logger
 	JWT
+	Catalog
+}
+
+// Catalog describes the service catalog's prices. Currency is the ISO 4217
+// code every fee is in; it travels with ServiceCompleted and the appointment
+// events so billing-service never has to guess it.
+type Catalog struct {
+	Currency string
 }
 
 type Database struct {
@@ -100,6 +108,9 @@ func LoadConfig() *Config {
 		JWT: JWT{
 			Secret: GetEnv("JWT_SECRET", ""),
 			Issuer: GetEnv("JWT_ISSUER", "identity-service"),
+		},
+		Catalog: Catalog{
+			Currency: GetEnv("CATALOG_CURRENCY", "USD"),
 		},
 	}
 }

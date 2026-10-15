@@ -67,6 +67,7 @@ func SchedulerApplication(ctx context.Context) {
 		txManager,
 		client.NewCustomerClient(cfg.Upstream.CustomerAPIURL, cfg.Upstream.Timeout),
 		client.NewVehicleClient(cfg.Upstream.VehicleAPIURL, cfg.Upstream.Timeout),
+		cfg.Catalog.Currency,
 	)
 
 	// Background workers run on their own context, cancelled only after the

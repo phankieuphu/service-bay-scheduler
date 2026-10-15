@@ -1,7 +1,10 @@
 package com.servicebay.billing.adapters.persistence;
 
 import com.servicebay.billing.adapters.persistence.SpringDataRepositories.OutboxJpa;
+import com.servicebay.billing.domain.booking.AppointmentRef;
+import com.servicebay.billing.domain.money.Money;
 import com.servicebay.billing.domain.outbox.OutboxMessage;
+import com.servicebay.billing.domain.ports.AppointmentRefRepository;
 import com.servicebay.billing.domain.ports.ConflictException;
 import com.servicebay.billing.domain.ports.OutboxRepository;
 import com.servicebay.billing.domain.ports.ProcessedEventRepository;
@@ -59,6 +62,50 @@ final class JpaSmallRepositories {
                     .param("source", source)
                     .param("eventId", eventId)
                     .update() == 1;
+        }
+    }
+
+    @Component
+    static class JdbcAppointmentRefRepository implements AppointmentRefRepository {
+
+        private final JdbcClient jdbc;
+
+        JdbcAppointmentRefRepository(JdbcClient jdbc) {
+            this.jdbc = jdbc;
+        }
+
+        @Override
+        @Transactional
+        public void upsert(AppointmentRef ref) {
+            jdbc.sql("""
+                    insert into appointment_ref
+                        (appointment_id, customer_id, vehicle_id, dealership_id, currency, estimate_minor, status, updated_at)
+                    values (:id, :customerId, :vehicleId, :dealershipId, :currency, :estimate, :status, now())
+                    on conflict (appointment_id) do update set
+                        customer_id = excluded.customer_id, vehicle_id = excluded.vehicle_id,
+                        dealership_id = excluded.dealership_id, currency = excluded.currency,
+                        estimate_minor = excluded.estimate_minor, status = excluded.status, updated_at = now()
+                    """)
+                    .param("id", ref.appointmentId())
+                    .param("customerId", ref.customerId())
+                    .param("vehicleId", ref.vehicleId())
+                    .param("dealershipId", ref.dealershipId())
+                    .param("currency", ref.currency())
+                    .param("estimate", ref.estimate().amountMinor())
+                    .param("status", ref.status().name())
+                    .update();
+        }
+
+        @Override
+        @Transactional(readOnly = true)
+        public Optional<AppointmentRef> findById(long appointmentId) {
+            return jdbc.sql("select * from appointment_ref where appointment_id = :id")
+                    .param("id", appointmentId)
+                    .query((rs, n) -> new AppointmentRef(rs.getLong("appointment_id"), rs.getLong("customer_id"),
+                            rs.getLong("vehicle_id"), rs.getLong("dealership_id"),
+                            Money.of(rs.getLong("estimate_minor"), rs.getString("currency")),
+                            AppointmentRef.Status.valueOf(rs.getString("status"))))
+                    .optional();
         }
     }
 

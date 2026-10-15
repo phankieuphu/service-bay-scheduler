@@ -22,4 +22,10 @@ public interface BillRepository {
     Optional<Bill> findLiveByAppointment(long appointmentId);
 
     List<Bill> findByCustomer(long customerId);
+
+    /**
+     * One page of the customer's bills, newest first: those with an id below
+     * beforeId (null for the first page), at most limit of them.
+     */
+    List<Bill> findByCustomer(long customerId, Long beforeId, int limit);
 }

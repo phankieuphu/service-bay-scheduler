@@ -1,0 +1,5 @@
+# Test-only overrides, loaded on top of src/main/resources/application.yml
+# (classpath:/config/ has higher precedence; it doesn't replace the main file).
+jwt:
+  # Billing refuses to start without a >= 32-byte secret, as in production.
+  secret: test-jwt-secret-0123456789-0123456789

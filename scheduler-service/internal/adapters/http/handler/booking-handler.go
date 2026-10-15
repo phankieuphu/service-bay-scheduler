@@ -26,7 +26,8 @@ func NewBookingHandler(service ports.BookingService) *BookingHandler {
 // RegisterRoutes expects r to already require authentication. Hubs, the
 // service catalog and availability are open to any signed-in user; booking
 // and a customer's own appointments are for CUSTOMER accounts, since an
-// appointment belongs to the caller's linked customer profile.
+// appointment belongs to the caller's linked customer profile. A hub's day
+// and completing an appointment are staff work.
 func (h *BookingHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/hubs", h.ListHubs)
 	r.GET("/hubs/:id/availability", h.Availability)
@@ -36,6 +37,50 @@ func (h *BookingHandler) RegisterRoutes(r *gin.RouterGroup) {
 	customer.POST("/appointments", h.Book)
 	customer.GET("/me/appointments", h.MyAppointments)
 	customer.POST("/appointments/:id/cancel", h.Cancel)
+
+	staff := r.Group("", middleware.RequireRole(entity.StaffRoles...))
+	staff.GET("/hubs/:id/appointments", h.HubDay)
+	staff.POST("/appointments/:id/complete", h.Complete)
+}
+
+// HubDay answers GET /hubs/:id/appointments?date=YYYY-MM-DD.
+func (h *BookingHandler) HubDay(c *gin.Context) {
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	date := c.Query("date")
+	if date == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "date is required (YYYY-MM-DD)"})
+		return
+	}
+
+	day, err := h.service.HubDay(c.Request.Context(), id, date)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	out := make([]dto.AppointmentDTO, len(day.Appointments))
+	for i, a := range day.Appointments {
+		out[i] = toAppointmentDTO(a)
+	}
+	c.JSON(http.StatusOK, dto.HubDayResponseDTO{HubID: day.HubID, Date: day.Date, TimeZone: day.TimeZone, Appointments: out})
+}
+
+// Complete answers POST /appointments/:id/complete: 200 with the completed
+// appointment, 409 if it was cancelled or already completed.
+func (h *BookingHandler) Complete(c *gin.Context) {
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+
+	appointment, err := h.service.Complete(c.Request.Context(), id)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toAppointmentDTO(appointment))
 }
 
 func (h *BookingHandler) ListHubs(c *gin.Context) {

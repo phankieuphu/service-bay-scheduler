@@ -955,3 +955,53 @@ p.flush {
   text-decoration: line-through;
   cursor: default;
 }
+
+/* --- Billing ------------------------------------------------------------ */
+
+/* An appointment whose billing is open: the detail wraps below the row. */
+.item.expanded {
+  flex-wrap: wrap;
+}
+
+.item-detail {
+  flex-basis: 100%;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.bill-lines {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.bill-lines td,
+.bill-lines th {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-weight: normal;
+}
+
+.bill-lines tfoot th,
+.bill-lines tfoot td {
+  border-bottom: none;
+  padding-top: 10px;
+}
+
+.bill-lines .amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-form {
+  max-width: 520px;
+}
+
+/* Below ~520px, the meta buttons wrap under the appointment text. */
+@media (max-width: 520px) {
+  .item.expanded .item-meta {
+    flex-wrap: wrap;
+  }
+}

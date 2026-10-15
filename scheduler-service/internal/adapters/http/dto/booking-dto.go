@@ -80,3 +80,12 @@ type AppointmentDTO struct {
 type AppointmentsResponseDTO struct {
 	Appointments []AppointmentDTO `json:"appointments"`
 }
+
+// HubDayResponseDTO is GET /hubs/:id/appointments: the hub's appointments on
+// one local day, earliest first.
+type HubDayResponseDTO struct {
+	HubID        int64            `json:"hub_id"`
+	Date         string           `json:"date"`
+	TimeZone     string           `json:"timezone"`
+	Appointments []AppointmentDTO `json:"appointments"`
+}

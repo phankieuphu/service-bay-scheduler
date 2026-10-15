@@ -31,7 +31,9 @@ type BookingService struct {
 	txManager    ports.TxManager
 	customers    ports.CustomerDirectory
 	vehicles     ports.VehicleDirectory
-	now          func() time.Time
+	// currency is the catalog's ISO 4217 code, stamped on every event.
+	currency string
+	now      func() time.Time
 }
 
 func NewBookingService(
@@ -41,6 +43,7 @@ func NewBookingService(
 	txManager ports.TxManager,
 	customers ports.CustomerDirectory,
 	vehicles ports.VehicleDirectory,
+	currency string,
 ) *BookingService {
 	return &BookingService{
 		catalog:      catalog,
@@ -49,6 +52,7 @@ func NewBookingService(
 		txManager:    txManager,
 		customers:    customers,
 		vehicles:     vehicles,
+		currency:     currency,
 		now:          time.Now,
 	}
 }
@@ -250,8 +254,68 @@ func (s *BookingService) Cancel(ctx context.Context, caller entity.Principal, ap
 	return appointment, nil
 }
 
+// HubDay implements [ports.BookingService].
+func (s *BookingService) HubDay(ctx context.Context, hubID int64, date string) (ports.HubDay, error) {
+	hub, err := s.catalog.GetHub(ctx, hubID)
+	if err != nil {
+		return ports.HubDay{}, err
+	}
+	loc := hubLocation(hub)
+	day, err := time.ParseInLocation(time.DateOnly, date, loc)
+	if err != nil {
+		return ports.HubDay{}, fmt.Errorf("%w: date must be YYYY-MM-DD", ports.ErrInvalidInput)
+	}
+	appointments, err := s.appointments.ListByHub(ctx, hubID, day, day.AddDate(0, 0, 1))
+	if err != nil {
+		return ports.HubDay{}, err
+	}
+	return ports.HubDay{HubID: hubID, Date: date, TimeZone: loc.String(), Appointments: appointments}, nil
+}
+
+// Complete implements [ports.BookingService]. The status change and the
+// ServiceCompleted event commit together; billing-service prices the bill
+// from the event, and vehicle-service adds it to the service history.
+// Check-in and start aren't built yet, so a BOOKED appointment can be
+// completed directly.
+func (s *BookingService) Complete(ctx context.Context, appointmentID int64) (entity.Appointment, error) {
+	appointment, err := s.appointments.GetByID(ctx, appointmentID)
+	if err != nil {
+		return entity.Appointment{}, err
+	}
+	completedAt := s.now()
+	event, err := events.NewServiceCompletedEvent(completedAt, appointment, s.currency)
+	if err != nil {
+		return entity.Appointment{}, err
+	}
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return entity.Appointment{}, err
+	}
+
+	err = s.txManager.RunInTx(ctx, func(ctx context.Context) error {
+		if err := s.appointments.Complete(ctx, appointmentID); err != nil {
+			return err
+		}
+		return s.outbox.Create(ctx, entity.OutboxMessage{
+			Topic:   constants.TopicServiceCompleted,
+			Key:     strconv.FormatInt(appointmentID, 10),
+			Payload: payload,
+		})
+	})
+	if err != nil {
+		if !isClientError(err) {
+			logger.ErrorContext(ctx, "failed to complete appointment", "appointment_id", appointmentID, "error", err)
+		}
+		return entity.Appointment{}, err
+	}
+
+	appointment.Status = constants.AppointmentCompleted
+	appointment.UpdatedAt = completedAt
+	return appointment, nil
+}
+
 func (s *BookingService) writeEvent(ctx context.Context, eventType events.EventType, topic string, appointment entity.Appointment) error {
-	payload, err := json.Marshal(events.NewAppointmentEvent(eventType, s.now(), appointment))
+	payload, err := json.Marshal(events.NewAppointmentEvent(eventType, s.now(), appointment, s.currency))
 	if err != nil {
 		return err
 	}

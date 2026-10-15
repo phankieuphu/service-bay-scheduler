@@ -19,6 +19,23 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    # Values are JSON strings both ways: the relay publishes outbox payloads
+    # as-is, and consumers parse the envelope themselves so a bad record can
+    # go to the DLT instead of failing in the deserializer.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:billing-service}
+      # earliest: a new consumer group must not skip events published before
+      # it first started (#60).
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  jackson:
+    # The API speaks snake_case like the Go services.
+    property-naming-strategy: SNAKE_CASE
   lifecycle:
     # Graceful shutdown: on SIGTERM, stop accepting requests and give
     # in-flight ones this long to finish.
@@ -50,3 +67,41 @@ management:
 logging:
   level:
     root: ${LOG_LEVEL:info}
+
+billing:
+  # Must match scheduler-service's CATALOG_CURRENCY.
+  currency: ${BILLING_CURRENCY:USD}
+  # business-requirement §6; the amount is still open (§10 #6), so this is a placeholder.
+  warranty-fee: ${BILLING_WARRANTY_FEE:50.00}
+  # The day a completion counts as for the warranty check.
+  time-zone: ${BILLING_TIME_ZONE:Asia/Ho_Chi_Minh}
+  # FIXED (deposit-value in major units), PERCENT (deposit-value % of the booking's estimate) or FULL.
+  # business-requirement §10 #5 is open, so it's configuration.
+  deposit-policy: ${DEPOSIT_POLICY:PERCENT}
+  deposit-value: ${DEPOSIT_VALUE:20}
+
+stripe:
+  # Test-mode keys (sk_test_..., whsec_...) outside production. Without a
+  # secret key the service starts, and payment endpoints answer 503.
+  secret-key: ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+  # Empty = api.stripe.com; e.g. http://localhost:12111 for stripe-mock.
+  api-base: ${STRIPE_API_BASE:}
+  return-url: ${STRIPE_RETURN_URL:http://localhost:5173/payments/return}
+
+# Must match identity-service's JWT_SECRET (>= 32 bytes) and JWT_ISSUER.
+jwt:
+  secret: ${JWT_SECRET:}
+  issuer: ${JWT_ISSUER:identity-service}
+
+upstream:
+  customer-api-url: ${CUSTOMER_API_URL:http://localhost:8080/api/v1}
+  vehicle-api-url: ${VEHICLE_API_URL:http://localhost:8081/api/v1}
+  scheduler-api-url: ${SCHEDULER_API_URL:http://localhost:8085/api/v1}
+  timeout: ${UPSTREAM_TIMEOUT:5s}
+
+outbox:
+  relay-interval: ${OUTBOX_RELAY_INTERVAL:2s}
+  batch-size: 100
+  retention-days: 7

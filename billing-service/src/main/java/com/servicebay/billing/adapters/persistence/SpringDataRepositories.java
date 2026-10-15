@@ -25,6 +25,11 @@ final class SpringDataRepositories {
         Optional<BillEntity> findLiveByAppointment(@Param("appointmentId") long appointmentId);
 
         List<BillEntity> findByCustomerIdOrderByCreatedAtDesc(long customerId);
+
+        @Query("select b from BillEntity b where b.customerId = :customerId and (:beforeId is null or b.id < :beforeId) "
+                + "order by b.id desc limit :limit")
+        List<BillEntity> findPageByCustomer(@Param("customerId") long customerId, @Param("beforeId") Long beforeId,
+                @Param("limit") int limit);
     }
 
     interface BillLineJpa extends JpaRepository<BillLineEntity, Long> {

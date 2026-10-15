@@ -9,6 +9,7 @@ import {
   type AppointmentStatus,
   type Hub,
 } from '../api/scheduler'
+import { AppointmentBilling } from './AppointmentBilling'
 import { PageHeader } from './PageHeader'
 
 const statusBadge: Record<AppointmentStatus, string> = {
@@ -29,6 +30,8 @@ export function MyAppointments({ onBook }: { onBook: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<number | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  // The appointment whose deposit or bill is open below it.
+  const [billingFor, setBillingFor] = useState<number | null>(null)
   // What counts as upcoming is fixed when the page opens.
   const [now] = useState(() => Date.now())
 
@@ -76,8 +79,9 @@ export function MyAppointments({ onBook }: { onBook: () => void }) {
           const hub = hubs.get(a.hub_id)
           const tz = hub?.timezone ?? DEFAULT_TIME_ZONE
           const cancellable = a.status === 'BOOKED' && new Date(a.start).getTime() > now
+          const billable = a.status === 'BOOKED' || a.status === 'COMPLETED'
           return (
-            <li key={a.id} className="item">
+            <li key={a.id} className={`item${billingFor === a.id ? ' expanded' : ''}`}>
               <div className="item-main">
                 <span className="strong">
                   {formatDate(a.start, tz)} · {formatTime(a.start, tz)}–{formatTime(a.end, tz)}
@@ -91,6 +95,16 @@ export function MyAppointments({ onBook }: { onBook: () => void }) {
               </div>
               <div className="item-meta">
                 <span className={`badge ${statusBadge[a.status]}`}>{a.status.replace('_', ' ')}</span>
+                {billable && (
+                  <button
+                    type="button"
+                    className="link"
+                    aria-expanded={billingFor === a.id}
+                    onClick={() => setBillingFor(billingFor === a.id ? null : a.id)}
+                  >
+                    {billingFor === a.id ? 'Hide billing' : a.status === 'COMPLETED' ? 'Bill' : 'Billing'}
+                  </button>
+                )}
                 {cancellable && (
                   <button
                     type="button"
@@ -102,6 +116,11 @@ export function MyAppointments({ onBook }: { onBook: () => void }) {
                   </button>
                 )}
               </div>
+              {billingFor === a.id && (
+                <div className="item-detail">
+                  <AppointmentBilling appointment={a} />
+                </div>
+              )}
             </li>
           )
         })}

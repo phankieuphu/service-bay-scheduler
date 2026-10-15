@@ -6,12 +6,14 @@ import { AuthScreen } from './components/AuthScreen'
 import { Brand } from './components/Brand'
 import { CustomerArea } from './components/CustomerArea'
 import { CustomersPage } from './components/CustomersPage'
+import { PaymentReturn } from './components/PaymentReturn'
+import { StaffAppointments } from './components/StaffAppointments'
 import { Tabs } from './components/Tabs'
 import { UserMenu } from './components/UserMenu'
 import { VehiclesPage } from './components/VehiclesPage'
 import './App.css'
 
-type Section = 'customers' | 'vehicles' | 'book' | 'appointments' | 'account'
+type Section = 'customers' | 'vehicles' | 'hub-day' | 'book' | 'appointments' | 'account'
 
 // The Customers and Vehicles sections are staff tools: customer-service
 // only serves staff, and vehicle changes need a staff role. A CUSTOMER gets
@@ -26,6 +28,18 @@ function Workspace({ user }: { user: User }) {
   // Set when another section links to a vehicle ("Open" on a customer's
   // vehicle list); VehiclesPage opens it on mount.
   const [vehicleToOpen, setVehicleToOpen] = useState<number | null>(null)
+  // Stripe sends the browser back here (?payment_id=…) after a payment
+  // method that redirects.
+  const [returningPayment, setReturningPayment] = useState<number | null>(() => {
+    const id = Number(new URLSearchParams(window.location.search).get('payment_id'))
+    return Number.isInteger(id) && id > 0 ? id : null
+  })
+
+  function leavePaymentReturn() {
+    window.history.replaceState(null, '', window.location.pathname)
+    setReturningPayment(null)
+    setSection('appointments')
+  }
 
   function openVehicle(vehicleId: number) {
     setVehicleToOpen(vehicleId)
@@ -36,6 +50,7 @@ function Workspace({ user }: { user: User }) {
     ? [
         { id: 'customers', label: 'Customers' },
         { id: 'vehicles', label: 'Vehicles' },
+        { id: 'hub-day', label: 'Appointments' },
         { id: 'account', label: 'Account' },
       ]
     : [
@@ -63,12 +78,14 @@ function Workspace({ user }: { user: User }) {
       </header>
 
       <main className="app-main">
-        {section === 'customers' && <CustomersPage onOpenVehicle={openVehicle} />}
-        {section === 'vehicles' && <VehiclesPage initialVehicleId={vehicleToOpen} />}
-        {(section === 'book' || section === 'appointments') && (
+        {returningPayment !== null && <PaymentReturn paymentId={returningPayment} onDone={leavePaymentReturn} />}
+        {returningPayment === null && section === 'customers' && <CustomersPage onOpenVehicle={openVehicle} />}
+        {returningPayment === null && section === 'vehicles' && <VehiclesPage initialVehicleId={vehicleToOpen} />}
+        {returningPayment === null && section === 'hub-day' && <StaffAppointments />}
+        {returningPayment === null && (section === 'book' || section === 'appointments') && (
           <CustomerArea section={section} onNavigate={setSection} />
         )}
-        {section === 'account' && <AccountPanel user={user} />}
+        {returningPayment === null && section === 'account' && <AccountPanel user={user} />}
       </main>
     </>
   )

@@ -21,6 +21,7 @@ Migrations in [migrations/](migrations/) are applied on startup (`DB_AUTO_MIGRAT
 | `VEHICLE_API_URL` | `http://localhost:8081/api/v1` | `GET /customers/:id/vehicles` |
 | `UPSTREAM_TIMEOUT_SEC` | `5` | per call to the two above |
 | `JWT_SECRET`, `JWT_ISSUER` | `""`, `identity-service` | must match identity-service |
+| `CATALOG_CURRENCY` | `USD` | ISO 4217 code of the catalog's fees, stamped on every event; must match billing-service's `BILLING_CURRENCY` |
 
 ## API
 
@@ -34,6 +35,8 @@ Every `/api/v1` route needs an identity-service access token (`Authorization: Be
 | `POST` | `/appointments` | `CUSTOMER` | `{"hub_id":1,"vehicle_id":7,"service_ids":[1,3],"start":"2026-10-20T10:00:00+07:00"}` → `201` appointment |
 | `GET` | `/me/appointments` | `CUSTOMER` | the caller's appointments, latest first |
 | `POST` | `/appointments/:id/cancel` | `CUSTOMER` | cancel an upcoming `BOOKED` appointment of the caller's |
+| `GET` | `/hubs/:id/appointments?date=YYYY-MM-DD` | staff | the hub's appointments on that local day, earliest first |
+| `POST` | `/appointments/:id/complete` | staff | mark the work done (from `BOOKED`, `CHECKED_IN` or `IN_PROGRESS`; `409` otherwise). Publishes `ServiceCompleted`, which billing-service prices the bill from and vehicle-service adds to the service history |
 
 Errors: `400` invalid input (unknown service, outside opening hours, a vehicle that isn't the caller's), `404` not found or no linked customer profile, `409` the slot is taken / the vehicle is already booked then / not cancellable, `502` customer-service or vehicle-service failed.
 
@@ -44,8 +47,8 @@ Errors: `400` invalid input (unknown service, outside opening hours, a vehicle t
 3. In one transaction: a per-vehicle advisory lock, then a check that the vehicle has no overlapping live appointment, then the first free bay is picked and `appointment`, `appointment_vehicle`, `appointment_bay`, `appointment_service` and the outbox row are inserted.
 4. The `no_bay_double_booking` exclusion constraint on `appointment_bay` is the final guard: if a concurrent booking took the bay first, the insert fails with `23P01` and the request gets `409`.
 
-Fees are copied onto `appointment_service.fee_charged` at booking time (§5c). Events: `scheduler.appointment.booked.v1` and `scheduler.appointment.cancelled.v1`, contract in [architecture-design.md §3d](../docs/architecture-design.md).
+Fees are copied onto `appointment_service.fee_charged` at booking time (§5c). Events: `scheduler.appointment.booked.v1`, `scheduler.appointment.cancelled.v1` and `scheduler.appointment.service-completed.v1`. Contracts are in [architecture-design.md §3d, §3b and §3e](../docs/architecture-design.md).
 
 ## Not built yet
 
-Staff views of a hub's day, check-in / start / complete, technician assignment, `ServiceCompleted` (§3b), and keeping the hub/bay/catalog snapshot current from dealership-service events.
+Check-in and start (completion goes straight from `BOOKED`), technician assignment, and keeping the hub/bay/catalog snapshot current from dealership-service events.

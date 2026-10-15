@@ -41,7 +41,7 @@ class BalanceTest {
     }
 
     private static Payment payment(long id, PaymentType type, long amount, PaymentStatus status) {
-        return new Payment(id, 1, type, vnd(amount), status, "pi_" + id, "key-" + id, null, null, 0);
+        return new Payment(id, 1, type, vnd(amount), status, "pi_" + id, "key-" + id, null, null, null, null, null, 0);
     }
 
     private static Refund refund(long paymentId, long amount, RefundStatus status) {

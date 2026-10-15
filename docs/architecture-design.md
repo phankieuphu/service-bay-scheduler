@@ -6,17 +6,18 @@ Most of this document is the **target** design. §0 says how much of it is built
 
 ---
 
-## 0. Implementation status (2026-09-29)
+## 0. Implementation status (2026-10-15)
 
 | Part of the design | Status |
 |---|---|
 | identity-service | Built: register, login, refresh, logout, `GET /me`, admin user provisioning and status changes. Publishes `UserCreated` and `UserUpdated` (§3a). |
 | customer-service | Built: customer CRUD, cursor pagination, optimistic locking, soft delete. Publishes the §3c events. Consumes `identity.user-events`: every `CUSTOMER` user gets a profile linked by `user_id` (an existing customer with the same email is claimed, otherwise one is created), readable at `GET /customer/me`. |
 | vehicle-service | Built: registry, owner assign/transfer, warranty, installed materials, service history. Produces and consumes the §3b events. Consumes `identity.user-events` but only logs them for now. |
-| scheduler-service | Built: hubs, service catalog, free-slot search, booking, a customer's own appointments and cancellation. Bay double-booking is prevented by the exclusion constraint (§4); vehicle double-booking by a per-vehicle advisory lock plus an overlap check. Checks the caller's profile and vehicles synchronously (§4 option 1). Publishes the §3d events. Its hub/bay/catalog tables are a local snapshot (§5b) filled from the dev seed until dealership-service exists. No staff workflow (check-in, completion, technicians) and no `ServiceCompleted` yet. |
-| dealership, billing, notification, report services | Not built. dealership, notification and report have a database and schema in `postgres/init/` (`04`, `07`, `08`) and nothing else yet; billing-service is scaffolded in Java. |
+| scheduler-service | Built: hubs, service catalog, free-slot search, booking, a customer's own appointments and cancellation. Bay double-booking is prevented by the exclusion constraint (§4); vehicle double-booking by a per-vehicle advisory lock plus an overlap check. Checks the caller's profile and vehicles synchronously (§4 option 1). Publishes the §3d events. Its hub/bay/catalog tables are a local snapshot (§5b) filled from the dev seed until dealership-service exists. Staff can list a hub's day and mark an appointment completed, which publishes `ServiceCompleted` (§3b) with per-service prices (§3e). No check-in, start or technician assignment yet. |
+| billing-service | Built (Java 25 / Spring Boot): deposits at booking, bills priced from `ServiceCompleted` (warranty fee by vehicle-service's answer), paying the balance, Stripe PaymentIntents and webhooks, reads, JWT auth. Consumes and produces the §3e events. Not yet: material costs (no `MaterialsConsumed` until dealership-service exists), refunds and disputes (#89), reconciliation (#91). |
+| dealership, notification, report services | Not built. Each has a database and schema in `postgres/init/` (`04`, `07`, `08`) and nothing else yet. |
 | API Gateway (§2, §7) | Not built. The web app (`frontend/`) calls each service directly, and the services allow any CORS origin. Each service verifies identity-service's access tokens itself (shared HS256 secret). |
-| Transactional outbox (§3) | Built in all four Go services: outbox row in the same transaction, relay polls every 2 s. |
+| Transactional outbox (§3) | Built in all four Go services and billing-service: outbox row in the same transaction, relay polls every 2 s. billing's relay holds a Postgres advisory lock per pass, so only one replica publishes. |
 | Database per service (§5, §7) | Built: one Postgres instance, one database per service, no cross-database FKs. |
 | Ids (§5a) | Partly as designed. identity-service mints UUIDs; customer-service and vehicle-service still use `BIGINT` identity keys, and cross-service references (`customer_vehicle.customer_id`, `vehicle_material.material_id`, …) are `BIGINT` too. Customer profiles store the identity `user_id` (§3a). scheduler-service's ids are `BIGINT` too. |
 | Redis (§7) | Used for identity-service refresh tokens and a 30 s cache of customer list pages. No availability cache yet: scheduler-service answers availability from Postgres. |
@@ -150,7 +151,7 @@ Produced by identity-service, consumed by customer-service and vehicle-service (
 
 ### 3b. vehicle-service event contracts
 
-**Consumed — `ServiceCompleted`** on `scheduler.appointment.service-completed.v1` (vehicle-service config `KAFKA_SERVICE_COMPLETED_TOPIC`). scheduler-service doesn't exist yet; this is the shape vehicle-service's history read model expects, so scheduler-service should publish exactly this. Key: appointment id.
+**Consumed — `ServiceCompleted`** on `scheduler.appointment.service-completed.v1` (vehicle-service config `KAFKA_SERVICE_COMPLETED_TOPIC`). scheduler-service publishes it when staff mark an appointment completed. Key: appointment id. It also carries `event_type`, `currency` and per-service prices for billing-service (§3e); vehicle-service ignores those fields.
 
 ```json
 {
@@ -257,7 +258,41 @@ Nothing consumes these topics yet. A consumer should dedupe on `event_id` or ups
 | `scheduler.appointment.booked.v1` | `AppointmentBooked` | `POST /appointments` |
 | `scheduler.appointment.cancelled.v1` | `AppointmentCancelled` | `POST /appointments/:id/cancel`; `status` is `CANCELLED` |
 
-Nothing consumes these yet; notification-service (booking confirmations) and billing-service (deposits) are the intended consumers. `ServiceCompleted` (§3b) isn't published yet, since nothing marks an appointment completed.
+`appointment.currency` is the catalog's ISO 4217 code (`CATALOG_CURRENCY`). billing-service consumes both topics: the booking's estimate prices its deposit, and a cancellation voids an unpaid bill. notification-service (booking confirmations) is the other intended consumer.
+
+`POST /appointments/:id/complete` (staff) also publishes **`ServiceCompleted`** on `scheduler.appointment.service-completed.v1`, in the flat §3b shape plus the priced fields of §3e.
+
+### 3e. billing-service event contracts
+
+**Consumed:** `AppointmentBooked` and `AppointmentCancelled` (§3d), and `ServiceCompleted` (§3b), consumer group `billing-service`, `auto.offset.reset=earliest`. Each handler is idempotent on (topic, `event_id`) through `processed_event`. A failing record is retried with exponential backoff (about 2 minutes), then goes to `<topic>.DLT`; a record that can't be parsed goes to the DLT straight away.
+
+`ServiceCompleted` must carry, besides the §3b fields:
+
+```json
+{
+  "event_type": "ServiceCompleted",
+  "currency": "USD",
+  "services": [
+    { "service_id": 1, "name": "Oil and filter change", "quantity": 1, "fee": "45.00", "unit_price_minor": 4500 }
+  ]
+}
+```
+
+`unit_price_minor` is the fee in the currency's minor units, copied from `appointment_service.fee_charged` at completion (§5c). billing looks up the warranty with `GET /vehicle/:id/warranty?date=<completed_at as a date in BILLING_TIME_ZONE>` and adds a `WARRANTY_FEE` line (`BILLING_WARRANTY_FEE`) only if the vehicle isn't in warranty that day (business-requirement §6). If vehicle-service can't answer, the handler throws and is retried: it never assumes the warranty is fine. That call uses a short-lived service token billing signs with the shared JWT secret (subject `service:billing-service`, role `SERVICE`). The Go services let any signed-in principal read, and none of their write routes accept `SERVICE`.
+
+`MaterialsConsumed` (dealership-service) isn't consumed yet. Until it exists, a bill is final on `ServiceCompleted` alone.
+
+**Produced** (via the outbox; key = appointment id). Same envelope as §3a; money is integer minor units plus `currency`.
+
+| Topic | `event_type` | When | Payload |
+|---|---|---|---|
+| `billing.bill.ready.v1` | `BillReady` | the bill is priced and a balance is due | `bill`: `id`, `appointment_id`, `customer_id`, `vehicle_id`, `status`, `currency`, `total_minor`, `amount_paid_minor`, `balance_due_minor`, `finalized_at` |
+| `billing.payment.received.v1` | `PaymentReceived` | a payment succeeded (Stripe's webhook, or a re-read of the intent) | `payment`: `id`, `bill_id`, `appointment_id`, `customer_id`, `type` (`DEPOSIT`/`FINAL`), `amount_minor`, `currency`, `bill_status`, `balance_due_minor` (`null` while the bill is `OPEN`, i.e. not priced), `paid_at` |
+| `billing.payment.failed.v1` | `PaymentFailed` | a card attempt was declined; the customer can retry on the same payment | `payment`: the same ids and amount, plus `failure_code` and `failure_message` (Stripe's customer-facing text) |
+
+scheduler (to confirm a deposit-gated booking), notification and report are the intended consumers of all three; nothing consumes them yet. `billing.payment.refunded.v1` is for the refund work (#89).
+
+**Payments.** Card data never reaches our servers: billing creates a Stripe PaymentIntent and returns its `client_secret`, and the browser confirms it with the Payment Element. `POST /webhooks/stripe` is the source of truth. It verifies the signature, records the Stripe event id in `processed_event`, then **re-reads the PaymentIntent** rather than trusting the payload, so out-of-order events can't move a payment backwards. Every Stripe create passes an idempotency key derived from our payment id, and the client's `Idempotency-Key` header makes `POST /bookings/:id/deposit` and `POST /bills/:id/payments` safe to retry. The amount always comes from the server: the deposit policy (`DEPOSIT_POLICY` / `DEPOSIT_VALUE`, since business-requirement §10 #5 is open) or the bill's balance.
 
 ---
 

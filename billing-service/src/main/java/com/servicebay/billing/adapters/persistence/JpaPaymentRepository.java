@@ -59,7 +59,12 @@ class JpaPaymentRepository implements PaymentRepository {
 
     private static Payment toDomain(PaymentEntity e) {
         return new Payment(e.id, e.billId, e.type, Money.of(e.amountMinor, e.currency), e.status,
-                e.stripePaymentIntentId, e.idempotencyKey, e.failureCode, e.succeededAt, e.version);
+                e.stripePaymentIntentId, e.idempotencyKey, e.failureCode, e.failureMessage, e.cardBrand, e.cardLast4,
+                e.succeededAt, e.version);
+    }
+
+    private static String truncate(String value, int max) {
+        return value == null || value.length() <= max ? value : value.substring(0, max);
     }
 
     private static PaymentEntity toEntity(Payment p) {
@@ -73,6 +78,9 @@ class JpaPaymentRepository implements PaymentRepository {
         e.stripePaymentIntentId = p.stripePaymentIntentId();
         e.idempotencyKey = p.idempotencyKey();
         e.failureCode = p.failureCode();
+        e.failureMessage = truncate(p.failureMessage(), 500);
+        e.cardBrand = p.cardBrand();
+        e.cardLast4 = p.cardLast4();
         e.succeededAt = p.succeededAt();
         e.version = p.version();
         return e;
