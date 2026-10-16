@@ -99,3 +99,52 @@ func TestVehicleService_AssignInitialOwner(t *testing.T) {
 		})
 	}
 }
+
+func TestVehicleService_GetCurrentOwner(t *testing.T) {
+	owned := entity.CustomerVehicle{CustomerID: 685, OwnedFrom: time.Date(2022, 2, 15, 0, 0, 0, 0, time.UTC), Status: constants.OwnershipCurrent}
+	newSvc := func(ownerErr error) ports.VehicleService {
+		repo := &MockVehicleRepository{GetByIDFunc: func(_ context.Context, id int64) (entity.Vehicle, error) {
+			if id != 1 {
+				return entity.Vehicle{}, ports.ErrNotFound
+			}
+			return entity.Vehicle{ID: 1}, nil
+		}}
+		vcr := &MockVehicleCustomerRepository{GetCurrentByVehicleFunc: func(_ context.Context, vehicleID int64) (entity.CustomerVehicle, error) {
+			if ownerErr != nil {
+				return entity.CustomerVehicle{}, ownerErr
+			}
+			return owned, nil
+		}}
+		return NewVehicleService(config.Config{}, repo, &MockOutboxRepository{}, vcr, &MockTxManager{}, &MockCache{}, &MockVehicleMaterialRepository{}, &MockServiceHistoryRepository{})
+	}
+
+	t.Run("returns the current owner", func(t *testing.T) {
+		got, err := newSvc(nil).GetCurrentOwner(context.Background(), 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got == nil || got.CustomerID != 685 || !got.OwnedFrom.Equal(owned.OwnedFrom) {
+			t.Errorf("owner = %+v, want customer 685 since 2022-02-15", got)
+		}
+	})
+
+	t.Run("no current owner is nil, not an error", func(t *testing.T) {
+		got, err := newSvc(ports.ErrNotFound).GetCurrentOwner(context.Background(), 1)
+		if err != nil || got != nil {
+			t.Errorf("got (%+v, %v), want (nil, nil)", got, err)
+		}
+	})
+
+	t.Run("unknown vehicle is ErrNotFound", func(t *testing.T) {
+		if _, err := newSvc(nil).GetCurrentOwner(context.Background(), 2); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("repository failure is returned", func(t *testing.T) {
+		boom := errors.New("boom")
+		if _, err := newSvc(boom).GetCurrentOwner(context.Background(), 1); !errors.Is(err, boom) {
+			t.Errorf("err = %v, want boom", err)
+		}
+	})
+}

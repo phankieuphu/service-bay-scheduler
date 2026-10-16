@@ -63,6 +63,21 @@ func (c VehicleCustomerRepository) ListCurrentByCustomer(ctx context.Context, cu
 	return ownerships, nil
 }
 
+// GetCurrentByVehicle implements [ports.VehicleCustomerRepository].
+func (c VehicleCustomerRepository) GetCurrentByVehicle(ctx context.Context, vehicleID int64) (entity.CustomerVehicle, error) {
+	var model models.CustomerVehicle
+	err := database_provider.DBFromContext(ctx, c.db).
+		Where("vehicle_id = ? AND status = ?", vehicleID, constants.OwnershipCurrent).
+		First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.CustomerVehicle{}, ports.ErrNotFound
+		}
+		return entity.CustomerVehicle{}, err
+	}
+	return c.toDomain(model), nil
+}
+
 // UnassignVehicleFromCustomer implements [ports.VehicleCustomerRepository].
 func (c VehicleCustomerRepository) UnassignVehicleFromCustomer(ctx context.Context, vehicleID int64, customerID int64, date time.Time) error {
 	db := database_provider.DBFromContext(ctx, c.db)

@@ -102,7 +102,7 @@ export function VehicleDetail({ vehicleId, onUpdated }: Props) {
       )}
       {notice && <p className={`message ${notice.kind} flush`}>{notice.text}</p>}
 
-      {!scrapped && <VehicleOwner vehicleId={vehicle.id} />}
+      {!scrapped && <VehicleOwner key={vehicle.id} vehicleId={vehicle.id} />}
 
       <VehicleRecords key={vehicle.updated_at} vehicleId={vehicle.id} />
     </section>

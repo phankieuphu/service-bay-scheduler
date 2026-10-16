@@ -146,6 +146,22 @@ func (v *VehicleService) AssignInitialOwner(ctx context.Context, vehicleID, cust
 	return err
 }
 
+// GetCurrentOwner implements [ports.VehicleService].
+func (v *VehicleService) GetCurrentOwner(ctx context.Context, vehicleID int64) (*entity.CustomerVehicle, error) {
+	if _, err := v.repository.GetByID(ctx, vehicleID); err != nil {
+		return nil, err
+	}
+	owner, err := v.vehicleCustomerRepository.GetCurrentByVehicle(ctx, vehicleID)
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return nil, nil
+	case err != nil:
+		logger.ErrorContext(ctx, "failed to get current owner", "vehicle", vehicleID, "error", err)
+		return nil, err
+	}
+	return &owner, nil
+}
+
 // RegisterVehicle implements [ports.VehicleService]. The vehicle row and its
 // VehicleCreated outbox row commit together.
 func (v *VehicleService) RegisterVehicle(ctx context.Context, vehicle entity.Vehicle) (entity.Vehicle, error) {

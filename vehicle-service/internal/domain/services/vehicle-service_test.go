@@ -52,6 +52,11 @@ type MockVehicleCustomerRepository struct {
 	ListCurrentByCustomerFunc       func(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error)
 	AssignVehicleToCustomerFunc     func(ctx context.Context, vehicleID, customerID int64, date time.Time) error
 	UnassignVehicleFromCustomerFunc func(ctx context.Context, vehicleID, customerID int64, date time.Time) error
+	GetCurrentByVehicleFunc         func(ctx context.Context, vehicleID int64) (entity.CustomerVehicle, error)
+}
+
+func (m *MockVehicleCustomerRepository) GetCurrentByVehicle(ctx context.Context, vehicleID int64) (entity.CustomerVehicle, error) {
+	return m.GetCurrentByVehicleFunc(ctx, vehicleID)
 }
 
 func (m *MockVehicleCustomerRepository) ListCurrentByCustomer(ctx context.Context, customerID int64) ([]entity.CustomerVehicle, error) {

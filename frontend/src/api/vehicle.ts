@@ -128,6 +128,15 @@ export function updateVehicle(vehicleId: number, payload: UpdateVehiclePayload):
   return authorizedRequest(`${BASE_URL}/vehicle/${vehicleId}`, jsonBody('PATCH', payload))
 }
 
+export interface VehicleOwnership {
+  vehicle_id: number
+  owner: { customer_id: number; owned_from: string } | null
+}
+
+export function getVehicleOwner(vehicleId: number): Promise<VehicleOwnership> {
+  return authorizedRequest(`${BASE_URL}/vehicle/${vehicleId}/owner`)
+}
+
 export function assignOwner(
   vehicleId: number,
   payload: { customer_id: number; date?: string },

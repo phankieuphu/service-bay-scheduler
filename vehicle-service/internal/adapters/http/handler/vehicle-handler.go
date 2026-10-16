@@ -40,6 +40,7 @@ func (h *VehicleHandler) RegisterRoutes(r *gin.RouterGroup) {
 	staff.POST("/transfer", h.TransferVehicle)
 	staff.POST("/vehicle", h.RegisterVehicle)
 	staff.PATCH("/vehicle/:id", h.UpdateVehicle)
+	staff.GET("/vehicle/:id/owner", h.GetCurrentOwner)
 	staff.POST("/vehicle/:id/owner", h.AssignInitialOwner)
 }
 
@@ -193,6 +194,26 @@ func (h *VehicleHandler) UpdateVehicle(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.NewVehicleResponseDTO(vehicle))
+}
+
+// GetCurrentOwner is staff-only: it exposes another customer's id.
+func (h *VehicleHandler) GetCurrentOwner(c *gin.Context) {
+	vehicleID, ok := pathID(c, "id", "vehicle")
+	if !ok {
+		return
+	}
+
+	owner, err := h.service.GetCurrentOwner(c.Request.Context(), vehicleID)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+
+	resp := dto.VehicleOwnerResponseDTO{VehicleID: vehicleID}
+	if owner != nil {
+		resp.Owner = &dto.OwnerDTO{CustomerID: owner.CustomerID, OwnedFrom: owner.OwnedFrom}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // AssignInitialOwner is for a vehicle that has never had an owner (or whose
