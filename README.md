@@ -17,7 +17,7 @@ Last updated: 2026-09-29.
 | **vehicle-service** (`:8081`) | Implemented | Register, search (VIN / plate), update status and warranty, assign owner, transfer ownership (row-locked), list a customer's vehicles, warranty / materials / service-history reads. Publishes `vehicle.*` events. |
 | **scheduler-service** (`:8085`) | Implemented | Booking: hubs, service catalog, free-slot search, book, list and cancel your own appointments. A Postgres exclusion constraint prevents double-booking a bay. Publishes `scheduler.appointment.*` events. See [scheduler-service/README.md](scheduler-service/README.md). |
 | **frontend** (`:5173`) | Implemented | React 19 + Vite app: sign in / sign up. Staff: customer list and detail, vehicle search, register, detail, ownership and records. Customers: book a service, see and cancel their appointments. |
-| Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Flink, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
+| Infrastructure | Implemented | Postgres 16, Kafka (KRaft), Redis, Prometheus, Grafana, Loki + Alloy, in Docker Compose and Kubernetes (with 1k / 100k / 1m load-test tiers). |
 | Load tests | Implemented | k6 and curl scenarios (smoke, baseline, load, stress, spike, soak) in [loadtest/](loadtest/). |
 | **billing-service** (`:8084`) | Scaffolded | Java 25 / Spring Boot 4 service with health, metrics and Flyway wired up. Deposits, bills and Stripe payments are being built ([#35](https://github.com/phankieuphu/service-bay-scheduler/issues/35)). |
 | dealership, notification, report services | Planned | Databases and schemas exist in [postgres/init/](postgres/init/); no service code yet. See [architecture-design.md](docs/architecture-design.md). |
@@ -30,7 +30,6 @@ Known gaps:
 - The frontend calls the services directly (CORS is open, `*`); there is no API gateway.
 - customer-service and vehicle-service check identity-service access tokens. A `CUSTOMER` can read their own linked profile (`GET /customer/me`); the rest of customer-service is staff-only. vehicle-service doesn't know which customer a user is, so a `CUSTOMER` can read any vehicle.
 - customer-service and vehicle-service use `BIGINT` ids, not the UUIDs the architecture calls for (see [architecture-design.md §0](docs/architecture-design.md)).
-- The service Dockerfiles build `GOARCH=amd64` binaries (see [Troubleshooting](#troubleshooting) for Apple Silicon).
 
 ---
 
@@ -140,7 +139,6 @@ This runs every service and every piece of infrastructure. You only need Docker.
 | http://localhost:8084 | billing-service (`/actuator/health`, `/actuator/prometheus`) |
 | http://localhost:3000 | Grafana (`admin` / `admin`) |
 | http://localhost:9090 | Prometheus |
-| http://localhost:8082 | Flink web UI |
 | http://localhost:12345 | Alloy debug UI |
 | `localhost:5432` | Postgres (`postgres` / `postgres`) |
 | `localhost:9092` | Kafka |
@@ -307,7 +305,6 @@ kubectl get pods -n service-bay -w
 | billing-service  | 8084         | 30084    |
 | prometheus       | 9090         | 30090    |
 | grafana          | 3000         | 30030    |
-| flink (web UI)   | 8081         | 30082    |
 
 Docker Desktop's Kubernetes (kind-based) does **not** expose NodePorts on `localhost`, so use port-forward, one terminal each:
 
@@ -318,7 +315,6 @@ kubectl port-forward -n service-bay svc/identity-service 8083:8083
 kubectl port-forward -n service-bay svc/scheduler-service 8085:8085
 kubectl port-forward -n service-bay svc/grafana          3000:3000   # admin/admin
 kubectl port-forward -n service-bay svc/prometheus       9090:9090
-kubectl port-forward -n service-bay svc/flink-jobmanager 8082:8081
 kubectl port-forward -n service-bay svc/alloy            12345:12345 # optional: log collector debug UI
 ```
 
@@ -350,7 +346,6 @@ kubectl delete -k k8s/
 | `kafka` pod in `CrashLoopBackOff`, log ends with `port is deprecated. Please use KAFKA_ADVERTISED_LISTENERS instead.` | Kubernetes injects `KAFKA_PORT=tcp://...` for the Service named `kafka`, and the `cp-kafka` image treats every `KAFKA_*` variable as a setting. [k8s/base/kafka/deployment.yaml](k8s/base/kafka/deployment.yaml) sets `enableServiceLinks: false` to prevent this. Keep that line. |
 | Services in `CrashLoopBackOff` with `failed to init Kafka producer ... connection refused` | Kafka isn't up yet (or is crashing; see the row above). Check `kubectl logs -n service-bay deploy/kafka`. Once Kafka is running, the services recover on their next restart, or run `kubectl rollout restart deploy/customer-service deploy/vehicle-service -n service-bay`. |
 | `ErrImagePull` / `ImagePullBackOff` on a `:local` image | The cluster can't see your local build. Redo step 2 for your cluster type. |
-| `exec format error` on Apple Silicon | The service Dockerfiles hard-code `GOARCH=amd64`. Remove it to build a native arm64 binary. |
 | No logs in Grafana's Loki datasource | Check the collector: `kubectl logs -n service-bay deploy/alloy`. A few `connection refused` warnings for `loki:3100` right after a fresh apply are normal, because Alloy retries until Loki is ready. If they continue, check `kubectl logs -n service-bay deploy/loki`. |
 | Grafana has no Loki datasource after an apply | Grafana only reads provisioning at startup: `kubectl rollout restart deploy/grafana -n service-bay`. |
 
@@ -367,7 +362,7 @@ kubectl describe pod -n service-bay <pod>
 
 | What | Tool | Where it comes from |
 |------|------|---------------------|
-| Metrics | Prometheus → Grafana | Services and Flink expose `/metrics`; Postgres and Kafka go through exporters (`postgres-exporter` sidecar on :9187, `kafka-exporter` on :9308). Compose uses static targets ([prometheus/prometheus.yml](prometheus/prometheus.yml)); k8s discovers every pod annotated `prometheus.io/scrape: "true"` + `prometheus.io/port` ([k8s/base/prometheus/configmap.yaml](k8s/base/prometheus/configmap.yaml)), so each replica is scraped on its own |
+| Metrics | Prometheus → Grafana | Services expose `/metrics`; Postgres and Kafka go through exporters (`postgres-exporter` sidecar on :9187, `kafka-exporter` on :9308). Compose uses static targets ([prometheus/prometheus.yml](prometheus/prometheus.yml)); k8s discovers every pod annotated `prometheus.io/scrape: "true"` + `prometheus.io/port` ([k8s/base/prometheus/configmap.yaml](k8s/base/prometheus/configmap.yaml)), so each replica is scraped on its own |
 | Logs | Loki → Grafana | [Grafana Alloy](https://grafana.com/docs/alloy/) collects the stdout/stderr of every container or pod and pushes it to Loki |
 
 Grafana is at http://localhost:3000 (`admin` / `admin`). With Docker Compose it's there directly. On k8s, port-forward first (see step 5 above). The Prometheus and Loki datasources are provisioned automatically, and so are these dashboards from [k8s/base/grafana/dashboards/](k8s/base/grafana/dashboards) (the single source for both setups; compose mounts the directory, k8s ships it as the `grafana-dashboards` ConfigMap):

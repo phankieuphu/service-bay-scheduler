@@ -9,9 +9,6 @@ resources:
   - kafka/deployment.yaml
   - kafka/exporter.yaml
   - redis/deployment.yaml
-  - flink/configmap.yaml
-  - flink/jobmanager.yaml
-  - flink/taskmanager.yaml
   - prometheus/rbac.yaml
   - prometheus/configmap.yaml
   - prometheus/deployment.yaml

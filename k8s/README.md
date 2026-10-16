@@ -53,7 +53,6 @@ TIER=100k ./loadtest/k6/run.sh load      # k6 tiers use the same names
 | PgBouncer | – | – | 2 × 250m / 128Mi |
 | Redis (no persistence) | 50m / 64Mi | 100m / 256Mi | 250m / 1Gi |
 | Kafka / ZooKeeper | 250m / 1Gi, 100m / 256Mi | 500m / 2Gi, 100m / 256Mi | 1 CPU / 4Gi, 250m / 512Mi |
-| Flink JM / TM | 250m / 1Gi, 500m / 1.5Gi | 500m / 1.5Gi, 1 CPU / 2Gi | 1 CPU / 2Gi, 2 × 2 CPU / 4Gi |
 | Prometheus (15d retention) | 250m / 512Mi, 10Gi | 500m / 1Gi, 20Gi | 1 CPU / 3Gi, 50Gi |
 | Suggested nodes | 2 × (2 vCPU, 8 GiB) | 3 × (4 vCPU, 8 GiB) | 8 × (4 vCPU, 16 GiB) |
 
@@ -62,7 +61,7 @@ Sizing rules used everywhere (from the issue):
 - **Memory limit = memory request** for every component.
 - **App pods:** CPU limit is 2–4× the request, and `GOMEMLIMIT` is about 85% of the memory limit. Go 1.26 already sets `GOMAXPROCS` from the CPU limit.
 - **Postgres, Redis, Kafka, ZooKeeper:** CPU limit = request, so they get Guaranteed QoS.
-- **JVM heaps follow the limit:** `KAFKA_HEAP_OPTS` is about 50% of the limit. Flink's `*.memory.process.size` equals the container limit. The images' default heaps would get OOM-killed inside these limits.
+- **JVM heaps follow the limit:** `KAFKA_HEAP_OPTS` is about 50% of the limit. The image's default heap would get OOM-killed inside these limits.
 - **DB connection budget:** services × HPA max × `DB_MAX_OPEN_CONNS` must stay under 80% of `max_connections` (100). tier-1m exceeds that (240), so it adds PgBouncer in transaction mode, which uses at most 48 Postgres connections. `max_prepared_statements` is set because GORM uses `PrepareStmt: true`.
 
 **metrics-server** is required for the HPAs to scale. Without it `kubectl get hpa` shows `<unknown>`. It is cluster-wide, so it isn't part of the overlays. Install it once per cluster:
@@ -103,7 +102,6 @@ NodePort services are exposed on the cluster node's IP:
 - scheduler-service: 30085
 - prometheus: 30090
 - grafana: 30030 (admin/admin)
-- flink web UI: 30082
 
 postgres, zookeeper, kafka, redis, loki and alloy are ClusterIP-only, matching their internal-only role in `docker-compose.yml`.
 
