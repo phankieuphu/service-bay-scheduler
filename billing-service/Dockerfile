@@ -5,6 +5,10 @@ FROM eclipse-temurin:25-jdk AS builder
 
 WORKDIR /app
 
+# Without a cap the Gradle JVM sizes its heap from the whole Docker VM, and next
+# to the Go builds that ran Docker Desktop out of memory (OOM kills).
+ENV GRADLE_OPTS="-Xmx512m -XX:MaxMetaspaceSize=384m"
+
 # Dependencies first, so a source-only change reuses this layer.
 COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle gradle
