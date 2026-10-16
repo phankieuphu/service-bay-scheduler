@@ -87,49 +87,6 @@ spec:
             requests: { cpu: "500m", memory: "2Gi" }
             limits: { cpu: "500m", memory: "2Gi" }
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: flink-config
-  namespace: service-bay
-data:
-  FLINK_PROPERTIES: |
-    jobmanager.rpc.address: flink-jobmanager
-    taskmanager.numberOfTaskSlots: 2
-    metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
-    metrics.reporter.prom.port: 9249
-    # Must equal each container's memory limit; Flink splits it up internally.
-    jobmanager.memory.process.size: 1536m
-    taskmanager.memory.process.size: 2048m
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: flink-jobmanager
-  namespace: service-bay
-spec:
-  template:
-    spec:
-      containers:
-        - name: jobmanager
-          resources:
-            requests: { cpu: "500m", memory: "1536Mi" }
-            limits: { cpu: "1", memory: "1536Mi" }
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: flink-taskmanager
-  namespace: service-bay
-spec:
-  template:
-    spec:
-      containers:
-        - name: taskmanager
-          resources:
-            requests: { cpu: "1", memory: "2Gi" }
-            limits: { cpu: "2", memory: "2Gi" }
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

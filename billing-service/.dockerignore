@@ -1,5 +1,11 @@
 .gradle
 build
+bin
 .idea
+.vscode
 *.iml
 .env
+.DS_Store
+Dockerfile
+.dockerignore
+*.md

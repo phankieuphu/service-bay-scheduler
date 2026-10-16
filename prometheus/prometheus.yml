@@ -49,10 +49,6 @@ scrape_configs:
       - targets: ["billing-service:8084"]
         labels: { kubernetes_namespace: service-bay, kubernetes_pod_name: billing-service }
 
-  - job_name: flink
-    static_configs:
-      - targets: ["flink-jobmanager:9249", "flink-taskmanager:9249"]
-
   - job_name: postgres
     static_configs:
       - targets: ["postgres-exporter:9187"]

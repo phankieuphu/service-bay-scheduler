@@ -17,7 +17,7 @@ next to its `Dockerfile`. Railway picks it up through the service's
 Service names matter: the variable references below (`${{postgres.…}}`,
 `${{kafka.…}}`, `${{redis.…}}`) use them.
 
-The observability stack (Prometheus, Grafana, Loki, Alloy) and Flink are
+The observability stack (Prometheus, Grafana, Loki, Alloy) is
 not deployed. They stay local-only (docker-compose / k8s).
 
 ## 1. Stateful services

@@ -1,30 +1,31 @@
 # ===== BUILD STAGE =====
-FROM golang:1.27-bookworm AS builder
+# Runs on the build host's own architecture and cross-compiles for the target
+# one, so Apple Silicon and amd64 both get a native image without emulation.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 WORKDIR /app
 
+# Dependencies first, so a source-only change reuses this layer.
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -o server ./cmd/server/main.go && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -o migrate ./cmd/migrate
+ARG TARGETOS TARGETARCH
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/server ./cmd/migrate
 
 # ===== RUNTIME STAGE =====
-FROM debian:bookworm-slim
+# busybox wget serves the docker-compose healthcheck on /readyz.
+FROM alpine:3.22
 
-# curl is for the docker-compose healthcheck on /readyz.
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S app && adduser -S -G app -H app
 
-WORKDIR /app
-
-COPY --from=builder /app/server /server
+COPY --from=builder /out/server /server
 # For running migrations on their own: /migrate up|down|status
-COPY --from=builder /app/migrate /migrate
+COPY --from=builder /out/migrate /migrate
 
+USER app
 EXPOSE 8083
 
 CMD ["/server"]

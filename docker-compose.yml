@@ -1,110 +1,94 @@
+# Shared settings for the app services, merged in with `<<:`.
+x-app-env: &app-env
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_USERNAME: postgres
+  DB_PASSWORD: postgres
+  DB_SSLMODE: disable
+  KAFKA_BROKERS: kafka:29092
+  # Local-dev only. identity-service signs access tokens with it and the
+  # other services verify them, so every service must share this value.
+  JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
+
+x-redis-env: &redis-env
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ""
+
+x-depends-infra: &depends-infra
+  postgres:
+    condition: service_healthy
+  kafka:
+    condition: service_healthy
+
+x-app-service: &app-service
+  restart: unless-stopped
+  networks:
+    - backend
+
+# The Go images are alpine-based: busybox wget exits non-zero on a 503.
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 3s
+  retries: 3
+  start_period: 30s
+
 services:
   customer-service:
-    build:
-      context: ./customer-service
-      dockerfile: Dockerfile
+    <<: *app-service
+    build: ./customer-service
     container_name: customer-service
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
+      <<: *depends-infra
       redis:
         condition: service_started
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: postgres
+      <<: [*app-env, *redis-env]
       DB_NAME: customer_db
-      DB_SSLMODE: disable
       API_PORT: 8080
-      KAFKA_BROKERS: kafka:29092
       KAFKA_PRODUCER_TOPIC: customer.events
       KAFKA_CONSUMER_TOPIC: identity.user-events
       KAFKA_CONSUMER_GROUP: customer-service
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
-      # Must match identity-service's: access tokens are verified with it.
-      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/readyz"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 30s
+      <<: *healthcheck
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:8080/readyz"]
     ports:
       - "8080:8080"
-    networks:
-      - backend
+
   vehicle-service:
-    build:
-      context: ./vehicle-service
-      dockerfile: Dockerfile 
+    <<: *app-service
+    build: ./vehicle-service
     container_name: vehicle-service
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
+      <<: *depends-infra
       redis:
         condition: service_started
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: postgres
+      <<: [*app-env, *redis-env]
       DB_NAME: vehicle_db
-      DB_SSLMODE: disable
       API_PORT: 8081
-      KAFKA_BROKERS: kafka:29092
       KAFKA_PRODUCER_TOPIC: vehicle.events
       KAFKA_CONSUMER_TOPIC: identity.user-events
       KAFKA_CONSUMER_GROUP: vehicle-service
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
-      # Must match identity-service's: access tokens are verified with it.
-      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8081/readyz"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 30s
+      <<: *healthcheck
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:8081/readyz"]
     ports:
       - "8081:8081"
-    networks:
-      - backend
+
   identity-service:
-    build:
-      context: ./identity-service
-      dockerfile: Dockerfile
+    <<: *app-service
+    build: ./identity-service
     container_name: identity-service
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
+      <<: *depends-infra
       redis:
         condition: service_started
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: postgres
+      <<: [*app-env, *redis-env]
       DB_NAME: identity_db
-      DB_SSLMODE: disable
       API_PORT: 8083
-      KAFKA_BROKERS: kafka:29092
       KAFKA_PRODUCER_TOPIC: identity.user-events
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
-      # Local-dev only. Services that validate access tokens themselves
-      # must share this value.
-      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
       # Plain HTTP locally: Safari and Postman won't store a Secure cookie
       # from http://localhost.
       AUTH_COOKIE_SECURE: "false"
@@ -113,77 +97,46 @@ services:
       ADMIN_EMAIL: admin@servicebay.local
       ADMIN_PASSWORD: admin-local-dev-pass
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8083/readyz"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 30s
+      <<: *healthcheck
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:8083/readyz"]
     ports:
       - "8083:8083"
-    networks:
-      - backend
 
   scheduler-service:
-    build:
-      context: ./scheduler-service
-      dockerfile: Dockerfile
+    <<: *app-service
+    build: ./scheduler-service
     container_name: scheduler-service
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
+      <<: *depends-infra
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: postgres
+      <<: *app-env
       DB_NAME: scheduler_db
-      DB_SSLMODE: disable
       API_PORT: 8085
-      KAFKA_BROKERS: kafka:29092
       # Booking checks the caller's profile and vehicles with these,
       # forwarding the caller's own access token.
       CUSTOMER_API_URL: http://customer-service:8080/api/v1
       VEHICLE_API_URL: http://vehicle-service:8081/api/v1
-      # Must match identity-service's: access tokens are verified with it.
-      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
       # The catalog's currency, stamped on every event. Must match
       # billing-service's BILLING_CURRENCY.
       CATALOG_CURRENCY: ${CATALOG_CURRENCY:-USD}
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8085/readyz"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 30s
+      <<: *healthcheck
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:8085/readyz"]
     ports:
       - "8085:8085"
-    networks:
-      - backend
 
   billing-service:
-    build:
-      context: ./billing-service
-      dockerfile: Dockerfile
+    <<: *app-service
+    build: ./billing-service
     container_name: billing-service
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
+      <<: *depends-infra
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: postgres
+      # billing also signs its own service token for vehicle-service with
+      # the shared JWT_SECRET.
+      <<: *app-env
       DB_NAME: billing_db
-      DB_SSLMODE: disable
       API_PORT: 8084
-      KAFKA_BROKERS: kafka:29092
-      # Must match identity-service's: access tokens are verified with it,
-      # and billing signs its own service token for vehicle-service with it.
-      JWT_SECRET: local-dev-jwt-secret-change-me-0123456789
       CUSTOMER_API_URL: http://customer-service:8080/api/v1
       VEHICLE_API_URL: http://vehicle-service:8081/api/v1
       SCHEDULER_API_URL: http://scheduler-service:8085/api/v1
@@ -218,8 +171,6 @@ services:
       start_period: 60s
     ports:
       - "8084:8084"
-    networks:
-      - backend
 
   postgres:
     image: postgres:18
@@ -246,7 +197,8 @@ services:
   # services' migrations have created the tables, then exits. Skips tables
   # that already have rows. Leave it out with --scale db-seed=0.
   db-seed:
-    image: postgres:16
+    # Same image as postgres, so only one gets pulled.
+    image: postgres:18
     container_name: db-seed
     depends_on:
       postgres:
@@ -278,6 +230,8 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # The image defaults to a 1G heap; one dev broker needs far less.
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
     healthcheck:
       test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server kafka:29092 >/dev/null 2>&1"]
@@ -297,38 +251,6 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    networks:
-      - backend
-
-  flink-jobmanager:
-    image: flink:2.3-java17
-    container_name: flink-jobmanager
-    command: jobmanager
-    depends_on:
-      kafka:
-        condition: service_started
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
-        metrics.reporter.prom.port: 9249
-    ports:
-      - "8082:8081"
-    networks:
-      - backend
-
-  flink-taskmanager:
-    image: flink:2.3-java17
-    container_name: flink-taskmanager
-    command: taskmanager
-    depends_on:
-      - flink-jobmanager
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 2
-        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
-        metrics.reporter.prom.port: 9249
     networks:
       - backend
 
