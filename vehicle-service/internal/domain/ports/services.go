@@ -17,6 +17,9 @@ type VehicleService interface {
 	// AssignInitialOwner gives a vehicle with no current owner its first
 	// one; after that, ownership changes go through TransferVehicle.
 	AssignInitialOwner(ctx context.Context, vehicleID, customerID int64, date time.Time) error
+	// GetCurrentOwner returns the vehicle's current ownership, or nil if it
+	// has none. Returns ErrNotFound if the vehicle doesn't exist.
+	GetCurrentOwner(ctx context.Context, vehicleID int64) (*entity.CustomerVehicle, error)
 	GetVehicleMaterials(ctx context.Context, vehicleID int64) ([]entity.VehicleMaterial, error)
 	// GetWarranty evaluates the warranty on asOf's calendar day, so billing
 	// can ask about the day the service was done, not just today.

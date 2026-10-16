@@ -69,6 +69,19 @@ type CustomerVehicleDTO struct {
 	OwnedFrom time.Time `json:"owned_from"`
 }
 
+// OwnerDTO is a vehicle's current owner and the day that ownership started.
+type OwnerDTO struct {
+	CustomerID int64     `json:"customer_id"`
+	OwnedFrom  time.Time `json:"owned_from"`
+}
+
+// VehicleOwnerResponseDTO is the body of GET /vehicle/:id/owner. Owner is
+// null when the vehicle has no current owner.
+type VehicleOwnerResponseDTO struct {
+	VehicleID int64     `json:"vehicle_id"`
+	Owner     *OwnerDTO `json:"owner"`
+}
+
 type CustomerVehiclesResponseDTO struct {
 	Vehicles []CustomerVehicleDTO `json:"vehicles"`
 }

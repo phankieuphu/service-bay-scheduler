@@ -47,6 +47,7 @@ func TestRoutes_ReadsAuthenticatedWritesStaff(t *testing.T) {
 		{http.MethodPost, "/api/v1/transfer", `{"vehicle_id":1,"from":1,"to":2}`, true},
 		{http.MethodPost, "/api/v1/vehicle", `{"vin":"1HGCM82633A004352","vehicle_model_id":1}`, true},
 		{http.MethodPatch, "/api/v1/vehicle/1", `{"status":"SOLD","updated_at":"2026-01-01T00:00:00Z"}`, true},
+		{http.MethodGet, "/api/v1/vehicle/1/owner", "", true}, // staff-only read: exposes a customer id
 		{http.MethodPost, "/api/v1/vehicle/1/owner", `{"customer_id":1}`, true},
 	}
 
