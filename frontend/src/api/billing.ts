@@ -116,6 +116,12 @@ export function payBill(billId: number, idempotencyKey: string): Promise<Started
   })
 }
 
+// Staff only: re-reads the PaymentIntent from Stripe and applies it, to
+// recover a payment whose webhook never arrived.
+export function syncPayment(paymentId: number): Promise<Payment> {
+  return authorizedRequest(`${BASE_URL}/payments/${paymentId}/sync`, { method: 'POST' })
+}
+
 // Stripe test-mode keys only: pays with a test card without the Payment Element.
 export function testConfirm(paymentId: number, paymentMethod = 'pm_card_visa'): Promise<Payment> {
   return authorizedRequest(

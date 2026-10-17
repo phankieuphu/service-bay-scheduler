@@ -139,6 +139,8 @@ export function StaffAppointments() {
 function StaffBill({ appointment }: { appointment: Appointment }) {
   const [bill, setBill] = useState<Bill | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
+  // Bumped after a payment sync so the bill is fetched again.
+  const [version, setVersion] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -166,7 +168,7 @@ function StaffBill({ appointment }: { appointment: Appointment }) {
     return () => {
       cancelled = true
     }
-  }, [appointment.id, appointment.status])
+  }, [appointment.id, appointment.status, version])
 
   if (error) return <p className="message error flush">{error}</p>
   if (bill === undefined) return <p className="muted small">Loading bill…</p>
@@ -177,5 +179,5 @@ function StaffBill({ appointment }: { appointment: Appointment }) {
       </p>
     )
   }
-  return <BillView bill={bill} canPay={false} onChanged={() => {}} />
+  return <BillView bill={bill} canPay={false} canSync onChanged={() => setVersion((v) => v + 1)} />
 }
