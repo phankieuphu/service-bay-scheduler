@@ -34,22 +34,25 @@ export function PaymentForm({ started, label, onSettled, onCancel }: Props) {
 
   return (
     <div className="card stack payment-form">
-      <div className="subsection-header">
-        <h3>
-          {label}: {amount}
-        </h3>
-        <button type="button" className="link" onClick={onCancel}>
-          Not now
-        </button>
+      <div className="payment-header">
+        <span className="label">{label}</span>
+        <span className="payment-amount">{amount}</span>
       </div>
       {stripePromise && started.client_secret ? (
         <Elements stripe={stripePromise} options={{ clientSecret: started.client_secret, appearance: appearance() }}>
-          <CardCheckout started={started} amount={amount} onSettled={onSettled} />
+          <CardCheckout started={started} amount={amount} onSettled={onSettled} onCancel={onCancel} />
         </Elements>
       ) : (
-        <p className="message info flush">
-          Card payments aren’t configured in this web app (VITE_STRIPE_PUBLISHABLE_KEY is not set).
-        </p>
+        <>
+          <p className="message info flush">
+            Card payments aren’t configured in this web app (VITE_STRIPE_PUBLISHABLE_KEY is not set).
+          </p>
+          <div className="actions">
+            <button type="button" className="secondary" onClick={onCancel}>
+              Not now
+            </button>
+          </div>
+        </>
       )}
       {import.meta.env.DEV && <TestCardShortcut key={started.payment_id} started={started} onSettled={onSettled} />}
     </div>
@@ -60,10 +63,12 @@ function CardCheckout({
   started,
   amount,
   onSettled,
+  onCancel,
 }: {
   started: StartedPayment
   amount: string
   onSettled: (payment: Payment) => void
+  onCancel: () => void
 }) {
   const stripe = useStripe()
   const elements = useElements()
@@ -106,6 +111,10 @@ function CardCheckout({
         <button type="submit" disabled={!stripe || state !== 'idle'}>
           {state === 'paying' ? 'Paying…' : state === 'confirming' ? 'Confirming…' : `Pay ${amount}`}
         </button>
+        <button type="button" className="secondary" disabled={state !== 'idle'} onClick={onCancel}>
+          Not now
+        </button>
+        <span className="muted small push-right">Card details go straight to Stripe.</span>
       </div>
     </form>
   )
@@ -136,8 +145,8 @@ function TestCardShortcut({ started, onSettled }: { started: StartedPayment; onS
   }
 
   return (
-    <div className="inset stack">
-      <span className="muted small">Development: pay with a Stripe test card (server test mode only)</span>
+    <details className="dev-tools">
+      <summary className="muted small">Development: pay with a Stripe test card (server test mode only)</summary>
       <div className="actions">
         <button type="button" className="secondary" disabled={busy} onClick={() => pay('pm_card_visa')}>
           Test card: success
@@ -147,6 +156,6 @@ function TestCardShortcut({ started, onSettled }: { started: StartedPayment; onS
         </button>
       </div>
       {error && <p className="message error flush">{error}</p>}
-    </div>
+    </details>
   )
 }

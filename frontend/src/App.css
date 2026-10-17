@@ -995,8 +995,101 @@ p.flush {
   font-variant-numeric: tabular-nums;
 }
 
+.stack.tight {
+  gap: 6px;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-row .item-meta {
+  flex-shrink: 0;
+}
+
+/* Paid / refund / balance on the left, the pay button on the right. */
+.bill-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+}
+
+.bill-totals {
+  margin: 0;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.bill-totals div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bill-totals dt {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.bill-totals dd {
+  margin: 0;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bill-totals .balance dd {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.deposit-cta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .payment-form {
   max-width: 520px;
+}
+
+.payment-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.payment-amount {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.dev-tools {
+  padding: 10px 14px;
+  border: 1px dashed var(--dashed);
+  border-radius: 8px;
+}
+
+.dev-tools summary {
+  cursor: pointer;
+}
+
+.dev-tools[open] summary {
+  margin-bottom: 10px;
+}
+
+.dev-tools .message {
+  margin-top: 10px;
 }
 
 /* Below ~520px, the meta buttons wrap under the appointment text. */

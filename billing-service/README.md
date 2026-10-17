@@ -72,6 +72,8 @@ Configuration (`.env.example`): `DEPOSIT_POLICY` is `FIXED`, `PERCENT` or `FULL`
 
 ## Stripe locally
 
+Full setup, the deployed webhook endpoint and troubleshooting: [docs/stripe.md](../docs/stripe.md).
+
 Use **test-mode** keys from https://dashboard.stripe.com/test/apikeys in the repo root `.env`, which docker compose reads:
 
 ```bash
@@ -81,7 +83,9 @@ STRIPE_WEBHOOK_SECRET=whsec_...           # printed by the command below
 ```
 
 ```bash
-stripe listen --forward-to localhost:8084/webhooks/stripe   # forwards webhooks, prints whsec_...
+stripe listen --forward-to localhost:8084/webhooks/stripe \
+  --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled,payment_intent.processing,payment_intent.requires_action
+                                                              # forwards webhooks, prints whsec_...
 stripe trigger payment_intent.succeeded                       # an event not for one of our payments: acknowledged and ignored
 ```
 

@@ -74,11 +74,14 @@ export function AppointmentBilling({ appointment }: { appointment: Appointment }
         </p>
       )}
       {canPayDeposit && !started && (
-        <div className="actions">
-          <button type="button" disabled={starting} onClick={payDeposit}>
+        <div className="inset deposit-cta">
+          <div className="item-main">
+            <span className="strong">Hold your booking with a deposit</span>
+            <span className="muted small">It counts toward the final bill.</span>
+          </div>
+          <button type="button" className="primary" disabled={starting} onClick={payDeposit}>
             {starting ? 'Preparing…' : 'Pay deposit'}
           </button>
-          <span className="muted small">A deposit holds your booking; it counts toward the final bill.</span>
         </div>
       )}
       {started && (
