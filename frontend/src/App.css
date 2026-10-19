@@ -266,6 +266,11 @@
   font-size: 15px;
 }
 
+.auth-back {
+  align-self: flex-start;
+  font-size: 14px;
+}
+
 /* ---------- text helpers ---------- */
 
 .muted {
