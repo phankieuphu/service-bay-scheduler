@@ -6,9 +6,9 @@ import { Tabs } from './Tabs'
 
 type Mode = 'sign-in' | 'sign-up'
 
-export function AuthScreen() {
+export function AuthScreen({ initialMode = 'sign-in' }: { initialMode?: Mode }) {
   const { state } = useAuth()
-  const [mode, setMode] = useState<Mode>('sign-in')
+  const [mode, setMode] = useState<Mode>(initialMode)
   const notice = state.status === 'signed-out' ? state.notice : undefined
 
   return (

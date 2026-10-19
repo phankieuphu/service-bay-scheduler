@@ -6,6 +6,7 @@ import { AuthScreen } from './components/AuthScreen'
 import { Brand } from './components/Brand'
 import { CustomerArea } from './components/CustomerArea'
 import { CustomersPage } from './components/CustomersPage'
+import { Landing, type AuthMode } from './components/Landing'
 import { PaymentReturn } from './components/PaymentReturn'
 import { StaffAppointments } from './components/StaffAppointments'
 import { Tabs } from './components/Tabs'
@@ -93,6 +94,10 @@ function Workspace({ user }: { user: User }) {
 
 function App() {
   const { state, retry, signOut } = useAuth()
+  // Signed-out visitors see the landing page until they pick sign in or
+  // sign up. A session that just expired skips it and goes straight to the
+  // sign-in form, where the notice explains why, unless they ask for home.
+  const [authMode, setAuthMode] = useState<AuthMode | 'home' | null>(null)
 
   if (state.status === 'signed-in') {
     return (
@@ -103,9 +108,19 @@ function App() {
     )
   }
 
+  const notice = state.status === 'signed-out' ? state.notice : undefined
+  if (state.status === 'signed-out' && (authMode === 'home' || (authMode === null && !notice))) {
+    return <Landing onAuth={setAuthMode} />
+  }
+
   return (
     <div className="app auth">
       <header className="auth-header">
+        {state.status === 'signed-out' && (
+          <button type="button" className="link auth-back" onClick={() => setAuthMode('home')}>
+            ← Back to home
+          </button>
+        )}
         <Brand as="h1" />
         <p className="muted">Book, track and pay for vehicle service across every hub.</p>
       </header>
@@ -128,7 +143,9 @@ function App() {
             </div>
           </div>
         )}
-        {state.status === 'signed-out' && <AuthScreen />}
+        {state.status === 'signed-out' && (
+          <AuthScreen key={authMode ?? 'sign-in'} initialMode={authMode === 'sign-up' ? 'sign-up' : 'sign-in'} />
+        )}
       </main>
     </div>
   )
